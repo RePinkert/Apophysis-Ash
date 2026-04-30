@@ -388,3 +388,51 @@ ash/
   - 修改 `TransformEditor.vue`（2 range + 8 number）
   - 修改 `PaletteBar.vue`（1 select）
   - 修改 `Toolbar.vue`（2 select）
+
+---
+
+## 渲染性能优化轮（autoresearch 风格）
+
+### 方法论
+
+采用类似 [Karpathy autoresearch](https://github.com/karpathy/autoresearch) 的自动化实验循环：
+- 创建 `scripts/bench-render.mjs` 基准测试脚本（类似 `uv run train.py`）
+- 定义唯一指标：max_viable_params（能成功渲染的最大分辨率×质量×oversample 组合）
+- 每次实验只改一处 → 跑 bench → keep/discard → 记录到 `bench-results.tsv`
+
+### 基线测量
+
+| 参数 | 状态 | render_ms |
+|------|------|-----------|
+| 800x600 q50 os2 | PASS | 1126 |
+| 1920x1080 q20 os2 | PASS | 1914 |
+| 1920x1080 q40 os2 | **FAIL** (dispatch=81,000 > maxWG=65,535) | — |
+
+### GPU 选择修复
+
+- **问题**: headless Chrome 默认使用 Intel Xe 集成显卡，RTX 3060 未被选中
+- **修复**: Puppeteer 启动参数添加 `--force_high_performance_gpu`；`device.ts` 添加 `forceFallbackAdapter: false` 和 adapter 日志
+- **效果**: 800x600 渲染时间从 ~1000ms 降至 ~43ms
+
+### E1: 多批次 iterate（解决 dispatch 超限 + TDR 超时）✅
+
+- **根因 1**: `dispatchWorkgroups(ceil(totalSamples/256))` 超出 `maxComputeWorkgroupsPerDimension=65535`
+- **根因 2**: 单次 dispatch 执行时间超出 Windows TDR 超时（~2s），触发 `DXGI_ERROR_DEVICE_HUNG`
+- **修复**:
+  - iterate pass 拆分为多批次，每批 dispatch ≤ maxWorkgroups
+  - 每批使用不同的 `thread_offset` 保证随机种子唯一
+  - 每批单独 `queue.submit()` + `await onSubmittedWorkDone()` 避免 TDR
+  - Params struct 新增 `thread_offset: u32` 字段，buffer 扩展至 28×4 字节（满足 WGSL 8 字节对齐）
+
+### Alpha 通道修复 ✅
+
+- **根因**: `filter.wgsl.ts` 最终输出 `textureStore(output_tex, vec4f(fr, fg, fb, 1.0))` 硬编码 alpha=1.0
+- **修复**: 改为 `vec4f(fr, fg, fb, alpha)`
+
+### 最终验证
+
+| 参数 | 状态 | render_ms |
+|------|------|-----------|
+| 3840x2160 quality=4000 oversample=2 | **PASS** | 98,617 |
+
+**目标达成**: 4K 分辨率 + 原版渲染质量 4000 + oversample 2，不动任何用户设置即可成功渲染
