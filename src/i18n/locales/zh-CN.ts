@@ -7,6 +7,8 @@ export default {
     loadTemplate: '-- 加载模板 --',
     render: '渲染',
     rendering: '渲染中...',
+    undo: '撤销',
+    redo: '重做',
   },
   transformList: {
     title: '变换列表',

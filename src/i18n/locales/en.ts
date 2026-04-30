@@ -7,6 +7,8 @@ export default {
     loadTemplate: '-- Load Template --',
     render: 'Render',
     rendering: 'Rendering...',
+    undo: 'Undo',
+    redo: 'Redo',
   },
   transformList: {
     title: 'Transforms',

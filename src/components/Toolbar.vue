@@ -1,6 +1,8 @@
 <template>
   <div class="toolbar">
     <div class="toolbar-group">
+      <button @click="flameStore.undo()" :disabled="!flameStore.canUndo" :title="t('toolbar.undo')">&#x21A9;</button>
+      <button @click="flameStore.redo()" :disabled="!flameStore.canRedo" :title="t('toolbar.redo')">&#x21AA;</button>
       <label class="file-btn">
         {{ t('toolbar.openFile') }}
         <input type="file" accept=".flame,.xml,.json" @change="onFileOpen" hidden />

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, computed } from 'vue'
 import type { Flame, XForm, Palette } from '../types/flame'
 import { createDefaultFlame, createDefaultXForm } from '../types/flame'
 import { parseFlameXML } from '../parser/flame-xml'
@@ -7,17 +7,60 @@ import { generateRandomFlame } from '../utils/random-flame'
 import { flameToJSON, flameFromJSON } from '../parser/flame-json'
 import { parseUGR } from '../parser/palette-ugr'
 
+function deepClone<T>(obj: T): T {
+  return JSON.parse(JSON.stringify(obj))
+}
+
+const MAX_HISTORY = 50
+
 export const useFlameStore = defineStore('flame', () => {
   const flame = shallowRef<Flame>(createDefaultFlame())
   const selectedXformIndex = ref(0)
   const isDirty = ref(false)
   const palettes = ref<Palette[]>([])
-  const flameHistory = ref<Flame[]>([])
+  const editorMode = ref<'browser' | 'detailed'>('browser')
+
+  const history = ref<Flame[]>([])
+  const historyIndex = ref(-1)
+
+  const canUndo = computed(() => historyIndex.value > 0)
+  const canRedo = computed(() => historyIndex.value < history.value.length - 1)
+
+  function pushHistory() {
+    const snapshot = deepClone(flame.value)
+    const nextIdx = historyIndex.value + 1
+    if (nextIdx < history.value.length) {
+      history.value.splice(nextIdx)
+    }
+    history.value.push(snapshot)
+    if (history.value.length > MAX_HISTORY) {
+      history.value.shift()
+    }
+    historyIndex.value = history.value.length - 1
+  }
+
+  function undo() {
+    if (!canUndo.value) return
+    historyIndex.value--
+    flame.value = deepClone(history.value[historyIndex.value])
+  }
+
+  function redo() {
+    if (!canRedo.value) return
+    historyIndex.value++
+    flame.value = deepClone(history.value[historyIndex.value])
+  }
+
+  function clearHistory() {
+    history.value = []
+    historyIndex.value = -1
+  }
 
   function setFlame(f: Flame) {
     flame.value = f
     selectedXformIndex.value = 0
     isDirty.value = false
+    clearHistory()
   }
 
   function loadFromXML(xml: string) {
@@ -54,6 +97,7 @@ export const useFlameStore = defineStore('flame', () => {
   }
 
   function addXform() {
+    pushHistory()
     const f = flame.value
     const newXf = createDefaultXForm(f.xforms.length)
     f.xforms.push(newXf)
@@ -65,6 +109,7 @@ export const useFlameStore = defineStore('flame', () => {
   function removeXform(index: number) {
     const f = flame.value
     if (f.xforms.length <= 1) return
+    pushHistory()
     f.xforms.splice(index, 1)
     flame.value = { ...f }
     if (selectedXformIndex.value >= flame.value.xforms.length) {
@@ -74,6 +119,7 @@ export const useFlameStore = defineStore('flame', () => {
   }
 
   function updateXform(index: number, updates: Partial<XForm>) {
+    pushHistory()
     const f = flame.value
     const xf = f.xforms[index]
     if (updates.variations) {
@@ -91,6 +137,7 @@ export const useFlameStore = defineStore('flame', () => {
   }
 
   function updateVariation(xformIndex: number, varName: string, weight: number) {
+    pushHistory()
     const f = flame.value
     const xf = f.xforms[xformIndex]
     if (weight === 0) {
@@ -103,6 +150,7 @@ export const useFlameStore = defineStore('flame', () => {
   }
 
   function updateVariationParam(xformIndex: number, paramName: string, value: number) {
+    pushHistory()
     const f = flame.value
     const xf = f.xforms[xformIndex]
     xf.variationParams.set(paramName, value)
@@ -111,6 +159,7 @@ export const useFlameStore = defineStore('flame', () => {
   }
 
   function updateRenderParam<K extends keyof Flame>(key: K, value: Flame[K]) {
+    pushHistory()
     const f = flame.value
     ;(f as unknown as Record<string, unknown>)[key as string] = value
     flame.value = { ...f }
@@ -118,6 +167,7 @@ export const useFlameStore = defineStore('flame', () => {
   }
 
   function setPalette(palette: Palette) {
+    pushHistory()
     const f = flame.value
     f.palette = palette
     flame.value = { ...f }
@@ -160,7 +210,11 @@ export const useFlameStore = defineStore('flame', () => {
     selectedXformIndex,
     isDirty,
     palettes,
-    flameHistory,
+    editorMode,
+    canUndo,
+    canRedo,
+    undo,
+    redo,
     setFlame,
     loadFromXML,
     loadFromJSON,

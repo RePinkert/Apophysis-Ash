@@ -63,11 +63,24 @@ onMounted(async () => {
   if (templates.length > 0) {
     flameStore.setFlame(templates[0])
   }
+
+  document.addEventListener('keydown', onKeyDown)
 })
 
 onUnmounted(() => {
   rendererStore.destroy()
+  document.removeEventListener('keydown', onKeyDown)
 })
+
+function onKeyDown(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    flameStore.undo()
+  } else if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+    e.preventDefault()
+    flameStore.redo()
+  }
+}
 </script>
 
 <style>
