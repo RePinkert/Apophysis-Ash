@@ -1,6 +1,6 @@
 <template>
   <div class="canvas-wrapper">
-    <canvas ref="canvasRef"
+    <canvas ref="canvasRef" class="render-canvas"
       @mousedown="onMouseDown"
       @mousemove="onMouseMove"
       @mouseup="onMouseUp"
@@ -322,7 +322,7 @@ defineExpose({ doRender })
   height: 100%;
 }
 
-canvas {
+.render-canvas {
   display: block;
   max-width: 100%;
   max-height: 100%;
@@ -331,7 +331,7 @@ canvas {
   cursor: grab;
 }
 
-canvas:active {
+.render-canvas:active {
   cursor: grabbing;
 }
 
