@@ -186,7 +186,7 @@ function commitDrag() {
   } else if (interactionType === 'rotate' && cssRotateAccum !== 0) {
     const newRotate = startFlameRotate + cssRotateAccum
     flameStore.updateRenderParam('rotate', newRotate)
-    flameStore.updateRenderParam('angle', -newRotate * Math.PI / 180)
+    flameStore.updateRenderParam('angle', newRotate * Math.PI / 180)
   }
 
   resetInteraction()
