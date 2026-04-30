@@ -56,4 +56,18 @@ export default {
     filtering: '滤波中',
     displaying: '显示中',
   },
+  guides: {
+    title: '参考线',
+    none: '-- 无 --',
+    center: '中心线',
+    thirds: '三分法',
+    phiGrid: '黄金比例网格',
+    goldenSpiral: '黄金螺旋',
+    goldenTriangle: '黄金三角形',
+    diagonals: '对角线',
+    harmoniousArmature: '和谐骨架',
+    layer: '层',
+    color: '颜色',
+    opacity: '不透明度',
+  },
 }

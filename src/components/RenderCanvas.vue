@@ -8,6 +8,12 @@
       @wheel.prevent="onWheel"
       @contextmenu.prevent
     ></canvas>
+    <GuidesOverlay
+      :offset-x="canvasLayout.offsetX"
+      :offset-y="canvasLayout.offsetY"
+      :rendered-width="canvasLayout.renderedW"
+      :rendered-height="canvasLayout.renderedH"
+    />
     <div v-if="showRotateIndicator" class="rotate-indicator">
       {{ rotateDisplay }}°
     </div>
@@ -15,9 +21,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useFlameStore } from '../stores/flame'
 import { useRendererStore } from '../stores/renderer'
+import GuidesOverlay from './GuidesOverlay.vue'
 
 const flameStore = useFlameStore()
 const rendererStore = useRendererStore()
@@ -40,6 +47,7 @@ let cssRotateAccum = 0
 let zoomOriginX = 0
 let zoomOriginY = 0
 let wheelTimer: ReturnType<typeof setTimeout> | null = null
+let layoutResizeObserver: ResizeObserver | null = null
 
 const showRotateIndicator = ref(false)
 const rotateDisplay = ref('0.0')
@@ -102,6 +110,7 @@ async function doRender() {
   }
 
   rendererStore.isRendering = false
+  updateCanvasLayout()
 }
 
 function getDisplayScale(): number {
@@ -109,6 +118,19 @@ function getDisplayScale(): number {
   const canvas = canvasRef.value
   if (!canvas) return 1
   return Math.min(canvas.clientWidth / flame.width, canvas.clientHeight / flame.height)
+}
+
+const canvasLayout = reactive({ offsetX: 0, offsetY: 0, renderedW: 0, renderedH: 0 })
+
+function updateCanvasLayout() {
+  const canvas = canvasRef.value
+  const flame = flameStore.flame
+  if (!canvas) return
+  const ds = getDisplayScale()
+  canvasLayout.renderedW = flame.width * ds
+  canvasLayout.renderedH = flame.height * ds
+  canvasLayout.offsetX = (canvas.clientWidth - canvasLayout.renderedW) / 2
+  canvasLayout.offsetY = (canvas.clientHeight - canvasLayout.renderedH) / 2
 }
 
 function beginInteraction(e: MouseEvent, type: 'pan' | 'rotate' | 'zoom') {
@@ -274,11 +296,17 @@ watch(() => flameStore.flame, scheduleRender, { deep: true })
 
 onMounted(() => {
   scheduleRender()
+  updateCanvasLayout()
+  if (canvasRef.value) {
+    layoutResizeObserver = new ResizeObserver(() => updateCanvasLayout())
+    layoutResizeObserver.observe(canvasRef.value)
+  }
 })
 
 onUnmounted(() => {
   if (renderTimeout) clearTimeout(renderTimeout)
   if (wheelTimer) clearTimeout(wheelTimer)
+  layoutResizeObserver?.disconnect()
 })
 
 defineExpose({ doRender })

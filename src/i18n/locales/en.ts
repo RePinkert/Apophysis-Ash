@@ -56,4 +56,18 @@ export default {
     filtering: 'Filtering',
     displaying: 'Displaying',
   },
+  guides: {
+    title: 'Guides',
+    none: '-- None --',
+    center: 'Center Crosshair',
+    thirds: 'Rule of Thirds',
+    phiGrid: 'Golden Ratio Grid',
+    goldenSpiral: 'Golden Spiral',
+    goldenTriangle: 'Golden Triangle',
+    diagonals: 'Diagonals',
+    harmoniousArmature: 'Harmonious Armature',
+    layer: 'Layer',
+    color: 'Color',
+    opacity: 'Opacity',
+  },
 }

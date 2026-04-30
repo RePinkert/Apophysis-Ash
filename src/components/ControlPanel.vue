@@ -84,17 +84,72 @@
       <input type="number" v-wheel-step :value="flame.center[1]" step="0.1"
         @input="updateCenter(1, $event)" />
     </div>
+
+    <h3>{{ t('guides.title') }}</h3>
+
+    <div class="param-row">
+      <label>{{ t('guides.layer') }} 1</label>
+      <select v-wheel-step class="guide-select" @change="onGuideChange(0, $event)">
+        <option value="" :selected="guidesStore.activeGuides[0] === null">{{ t('guides.none') }}</option>
+        <option v-for="g in guideOptions" :key="g.id" :value="g.id" :selected="guidesStore.activeGuides[0] === g.id">{{ g.label }}</option>
+      </select>
+    </div>
+
+    <div class="param-row">
+      <label>{{ t('guides.layer') }} 2</label>
+      <select v-wheel-step class="guide-select" :disabled="guidesStore.activeGuides[0] === null" @change="onGuideChange(1, $event)">
+        <option value="" :selected="guidesStore.activeGuides[1] === null">{{ t('guides.none') }}</option>
+        <option v-for="g in guideOptions" :key="g.id" :value="g.id" :selected="guidesStore.activeGuides[1] === g.id">{{ g.label }}</option>
+      </select>
+    </div>
+
+    <div class="param-row">
+      <label>{{ t('guides.color') }}</label>
+      <input type="color" :value="guidesStore.guideColor" @input="onColorChange" />
+    </div>
+
+    <div class="param-row">
+      <label>{{ t('guides.opacity') }}</label>
+      <input type="range" v-wheel-step :value="guidesStore.guideOpacity" min="0.05" max="1" step="0.05"
+        @input="onOpacityChange" />
+      <span class="val">{{ guidesStore.guideOpacity.toFixed(2) }}</span>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useFlameStore } from '../stores/flame'
+import { useGuidesStore } from '../stores/guides'
 import { useI18n } from '../i18n'
+import { GUIDE_IDS } from '../utils/guides'
+import type { GuideId } from '../utils/guides'
 
 const flameStore = useFlameStore()
+const guidesStore = useGuidesStore()
 const { t } = useI18n()
 const flame = computed(() => flameStore.flame)
+
+const guideOptions = computed(() =>
+  GUIDE_IDS.map(id => {
+    const i18nKey = id.replace(/-([a-z])/g, (_, c) => c.toUpperCase())
+    return { id, label: t(`guides.${i18nKey}`) }
+  })
+)
+
+function onGuideChange(slot: 0 | 1, e: Event) {
+  const val = (e.target as HTMLSelectElement).value
+  guidesStore.setGuide(slot, (val || null) as GuideId | null)
+}
+
+function onColorChange(e: Event) {
+  guidesStore.setGuideColor((e.target as HTMLInputElement).value)
+}
+
+function onOpacityChange(e: Event) {
+  const val = parseFloat((e.target as HTMLInputElement).value)
+  if (!isNaN(val)) guidesStore.setGuideOpacity(val)
+}
 
 function update(key: string, e: Event) {
   const val = parseFloat((e.target as HTMLInputElement).value)
@@ -180,5 +235,20 @@ input[type="range"]::-webkit-slider-thumb {
   font-family: monospace;
   min-width: 35px;
   text-align: right;
+}
+
+input[type="color"] {
+  width: 40px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #444;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+}
+
+.guide-select {
+  flex: 1;
+  font-size: 11px;
 }
 </style>
