@@ -5,7 +5,7 @@
     <div class="palette-bar" :style="paletteGradient" @click="onBarClick"></div>
 
     <div class="palette-presets">
-      <select v-model="selectedPreset" @change="onPresetChange">
+      <select v-wheel-step v-model="selectedPreset" @change="onPresetChange">
         <option value="">{{ t('palette.preset') }}</option>
         <option v-for="(p, i) in flameStore.palettes" :key="i" :value="i">
           {{ p.name || `Palette ${i + 1}` }}

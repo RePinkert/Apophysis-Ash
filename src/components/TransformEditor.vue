@@ -4,20 +4,20 @@
 
     <div class="section">
       <label>{{ t('transformEditor.weight') }}</label>
-      <input type="number" :value="xform.weight" step="0.1" min="0"
+      <input type="number" v-wheel-step :value="xform.weight" step="0.1" min="0"
         @input="updateField('weight', $event)" />
     </div>
 
     <div class="section">
       <label>{{ t('transformEditor.color') }}</label>
-      <input type="range" :value="xform.color" min="0" max="1" step="0.01"
+      <input type="range" v-wheel-step :value="xform.color" min="0" max="1" step="0.01"
         @input="updateField('color', $event)" />
       <span class="val">{{ xform.color.toFixed(2) }}</span>
     </div>
 
     <div class="section">
       <label>{{ t('transformEditor.symmetry') }}</label>
-      <input type="range" :value="xform.symmetry" min="0" max="1" step="0.01"
+      <input type="range" v-wheel-step :value="xform.symmetry" min="0" max="1" step="0.01"
         @input="updateField('symmetry', $event)" />
       <span class="val">{{ xform.symmetry.toFixed(2) }}</span>
     </div>
@@ -26,7 +26,7 @@
     <div class="coef-grid">
       <template v-for="(name, i) in coefNames" :key="i">
         <label>{{ name }}</label>
-        <input type="number" :value="xform.coefs[i]" step="0.01"
+        <input type="number" v-wheel-step :value="xform.coefs[i]" step="0.01"
           @input="updateCoef(i, $event)" />
       </template>
     </div>
@@ -35,7 +35,7 @@
     <div class="variations">
       <div v-for="v in allVariations" :key="v" class="var-row">
         <label>{{ v }}</label>
-        <input type="range" :value="getWeight(v)" min="0" max="2" step="0.01"
+        <input type="range" v-wheel-step :value="getWeight(v)" min="0" max="2" step="0.01"
           @input="updateVariation(v, $event)" />
         <span class="val">{{ getWeight(v).toFixed(2) }}</span>
       </div>
@@ -43,10 +43,10 @@
 
     <div v-if="hasJulianParams" class="section extra-params">
       <label>{{ t('transformEditor.julianPower') }}</label>
-      <input type="number" :value="xform.variationParams.get('julian_power') ?? 1" step="1"
+      <input type="number" v-wheel-step :value="xform.variationParams.get('julian_power') ?? 1" step="1"
         @input="updateVarParam('julian_power', $event)" />
       <label>{{ t('transformEditor.julianDist') }}</label>
-      <input type="number" :value="xform.variationParams.get('julian_dist') ?? 1" step="0.1"
+      <input type="number" v-wheel-step :value="xform.variationParams.get('julian_dist') ?? 1" step="0.1"
         @input="updateVarParam('julian_dist', $event)" />
     </div>
   </div>

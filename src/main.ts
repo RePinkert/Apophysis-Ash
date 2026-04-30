@@ -1,9 +1,13 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
+import { vWheelStep } from './directives/vWheelStep'
 
 const pinia = createPinia()
-createApp(App).use(pinia).mount('#app')
+const app = createApp(App)
+app.use(pinia)
+app.directive('wheel-step', vWheelStep)
+app.mount('#app')
 
 declare global {
   interface Window {

@@ -10,7 +10,7 @@
       <button class="btn-accent" @click="flameStore.generateRandom()">{{ t('toolbar.random') }}</button>
     </div>
     <div class="toolbar-group">
-      <select v-model="selectedTemplate" @change="onTemplateChange">
+      <select v-wheel-step v-model="selectedTemplate" @change="onTemplateChange">
         <option value="">{{ t('toolbar.loadTemplate') }}</option>
         <option v-for="(tpl, i) in templates" :key="i" :value="i">{{ tpl.name }}</option>
       </select>
@@ -24,7 +24,7 @@
       </span>
     </div>
     <div class="toolbar-group">
-      <select v-model="lang" @change="onLangChange" class="lang-select">
+      <select v-wheel-step v-model="lang" @change="onLangChange" class="lang-select">
         <option v-for="l in availableLocales" :key="l.value" :value="l.value">{{ l.label }}</option>
       </select>
     </div>
