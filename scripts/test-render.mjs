@@ -23,7 +23,7 @@ async function main() {
     console.log('[test-render] Launching headless Chrome...')
     browser = await puppeteer.launch({
       headless: true,
-      args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan'],
+      args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--force_high_performance_gpu'],
     })
 
     const page = await browser.newPage()

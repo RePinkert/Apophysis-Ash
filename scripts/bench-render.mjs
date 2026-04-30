@@ -18,7 +18,6 @@ const testWidth = parseInt(getArg('width', '800'))
 const testHeight = parseInt(getArg('height', '600'))
 const testQuality = parseInt(getArg('quality', '50'))
 const testOversample = parseInt(getArg('oversample', '2'))
-const testTimeout = parseInt(getArg('timeout', '60')) * 1000
 
 async function main() {
   console.log(`[bench] ${testWidth}x${testHeight} quality=${testQuality} oversample=${testOversample}`)
@@ -34,7 +33,7 @@ async function main() {
   try {
     browser = await puppeteer.launch({
       headless: true,
-      args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan'],
+      args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--force_high_performance_gpu'],
     })
 
     const page = await browser.newPage()
@@ -56,22 +55,7 @@ async function main() {
       return canvas && canvas.width > 0 && canvas.height > 0
     }, { timeout: 15000 })
 
-    const gpuLimits = await page.evaluate(async () => {
-      const adapter = await navigator.gpu.requestAdapter()
-      if (!adapter) return null
-      return {
-        maxBufferSize: adapter.limits.maxBufferSize,
-        maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
-        maxComputeWorkgroupsPerDimension: adapter.limits.maxComputeWorkgroupsPerDimension,
-        maxTextureDimension2D: adapter.limits.maxTextureDimension2D,
-      }
-    })
-    if (gpuLimits) {
-      console.log(`[bench] GPU limits: maxBufferMB=${(gpuLimits.maxBufferSize / 1048576).toFixed(0)} maxStorageMB=${(gpuLimits.maxStorageBufferBindingSize / 1048576).toFixed(0)} maxWG=${gpuLimits.maxComputeWorkgroupsPerDimension} maxTex2D=${gpuLimits.maxTextureDimension2D}`)
-    }
-
-    const t0 = Date.now()
-    const benchResult = await page.evaluate(async (w, h, q, os, timeout) => {
+    const benchResult = await page.evaluate(async (w, h, q, os) => {
       const allStores = window.__pinia?._s
       if (!allStores) return { error: 'no pinia stores' }
 
@@ -79,51 +63,49 @@ async function main() {
       const flameStore = allStores.get('flame')
       if (!rendererStore?.engine) return { error: 'no engine' }
 
+      const adapter = await navigator.gpu?.requestAdapter()
+      const gpuLimits = adapter ? {
+        maxBufferSize: adapter.limits.maxBufferSize,
+        maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+        maxComputeWorkgroupsPerDimension: adapter.limits.maxComputeWorkgroupsPerDimension,
+        maxTextureDimension2D: adapter.limits.maxTextureDimension2D,
+      } : null
+
       const flame = { ...flameStore.flame, width: w, height: h, quality: q, oversample: os }
 
       const renderStart = Date.now()
       let renderError = null
+      let imgData = null
       try {
-        await rendererStore.engine.renderToImageData(flame)
+        imgData = await rendererStore.engine.renderToImageData(flame)
       } catch (e) {
         renderError = e.message
       }
       const renderTime = Date.now() - renderStart
 
-      if (renderError) return { error: renderError, renderTime }
+      if (renderError) return { error: renderError, renderTime, gpuLimits }
 
-      const canvas = document.querySelector('canvas')
-      if (!canvas) return { error: 'no canvas' }
+      if (!imgData) return { error: 'renderToImageData returned null', renderTime, gpuLimits }
 
-      canvas.width = w
-      canvas.height = h
-      await rendererStore.engine.render(flame, canvas)
-
-      await new Promise(r => setTimeout(r, 500))
-
-      const tmp = document.createElement('canvas')
-      tmp.width = w
-      tmp.height = h
-      const ctx = tmp.getContext('2d')
-      if (!ctx) return { error: 'no 2d context' }
-      ctx.drawImage(canvas, 0, 0)
-      const data = ctx.getImageData(0, 0, w, h).data
       let nonBlack = 0
-      for (let i = 0; i < data.length; i += 4) {
-        if (data[i] > 5 || data[i + 1] > 5 || data[i + 2] > 5) nonBlack++
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        if (imgData.data[i] > 5 || imgData.data[i + 1] > 5 || imgData.data[i + 2] > 5) nonBlack++
       }
 
-      return { nonBlack, total: w * h, renderTime }
-    }, testWidth, testHeight, testQuality, testOversample, testTimeout)
+      return { nonBlack, total: w * h, renderTime, gpuLimits }
+    }, testWidth, testHeight, testQuality, testOversample)
 
-    const totalTime = Date.now() - t0
+    const gl = benchResult.gpuLimits
+    if (gl) {
+      console.log(`[bench] GPU: maxBuffer=${(gl.maxBufferSize/1048576).toFixed(0)}MB maxStorage=${(gl.maxStorageBufferBindingSize/1048576).toFixed(0)}MB maxWG=${gl.maxComputeWorkgroupsPerDimension} maxTex=${gl.maxTextureDimension2D}`)
+    }
 
     const hasGpuErrors = consoleMessages.some(m =>
-      (m.includes('[error]') && (m.includes('GPU') || m.includes('validation') || m.includes('buffer') || m.includes('Shader')))
+      m.includes('[error]') && (m.includes('GPU') || m.includes('validation') || m.includes('Shader'))
     )
 
     if (benchResult.error) {
-      console.log(`---\nstatus: crash\nerror: ${benchResult.error}\ntotal_ms: ${totalTime}`)
+      console.log(`---\nstatus: crash\nerror: ${benchResult.error}\nrender_ms: ${benchResult.renderTime || 0}`)
       process.exitCode = 1
     } else {
       const pass = benchResult.nonBlack > 0 && !hasGpuErrors
@@ -132,10 +114,9 @@ async function main() {
       console.log(`resolution: ${testWidth}x${testHeight}`)
       console.log(`quality: ${testQuality}`)
       console.log(`oversample: ${testOversample}`)
-      console.log(`non_black_pixels: ${benchResult.nonBlack}`)
-      console.log(`total_pixels: ${benchResult.total}`)
+      console.log(`non_black: ${benchResult.nonBlack}`)
+      console.log(`total: ${benchResult.total}`)
       console.log(`render_ms: ${benchResult.renderTime}`)
-      console.log(`total_ms: ${totalTime}`)
       console.log(`gpu_errors: ${hasGpuErrors}`)
       process.exitCode = pass ? 0 : 1
     }

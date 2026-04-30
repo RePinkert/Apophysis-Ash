@@ -34,6 +34,8 @@ struct Params {
   bg_b: f32,
   out_width: u32,
   out_height: u32,
+  iters_per_thread: u32,
+  thread_offset: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -58,16 +60,16 @@ fn pcg_random_f32(state: ptr<function, u32>) -> f32 {
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (gid.x >= params.num_samples) { return; }
 
-  var seed = gid.x * 123456789u + 362436069u;
+  var seed = (params.thread_offset + gid.x) * 123456789u + 362436069u;
 
   var px = pcg_random_f32(&seed) * 2.0 - 1.0;
   var py = pcg_random_f32(&seed) * 2.0 - 1.0;
   var pcolor = pcg_random_f32(&seed);
 
   let fuse = 20u;
-  let iters_per_thread = 20u;
+  let iters = params.iters_per_thread;
 
-  for (var it = 0u; it < fuse + iters_per_thread; it++) {
+  for (var it = 0u; it < fuse + iters; it++) {
     let rd = pcg_random_f32(&seed);
     var r = rd;
 

@@ -7,8 +7,8 @@ import { DENSITY_SHADER } from './shaders/density.wgsl'
 import { FILTER_SHADER } from './shaders/filter.wgsl'
 import { DISPLAY_SHADER_VERT, DISPLAY_SHADER_FRAG } from './shaders/display.wgsl'
 
-const PARAMS_SIZE = 24 * 4
-const XFORMS_BUFFER_SIZE = MAX_XFORMS * 34 * 4 // 34 floats per xform
+const PARAMS_SIZE = 28 * 4
+const XFORMS_BUFFER_SIZE = MAX_XFORMS * 34 * 4
 const PALETTE_BUFFER_SIZE = 256 * 4 * 4
 const MAX_FILTER_WIDTH = 20
 
@@ -19,6 +19,7 @@ export class FlamePipeline {
   private filterPipeline!: GPUComputePipeline
   private displayPipelineCache: Map<string, GPURenderPipeline> = new Map()
 
+  private maxWorkgroups: number
   private paramsBuffer!: GPUBuffer
   private xformsBuffer!: GPUBuffer
   private paletteBuffer!: GPUBuffer
@@ -42,6 +43,7 @@ export class FlamePipeline {
 
   private constructor(device: GPUDevice) {
     this.device = device
+    this.maxWorkgroups = device.limits.maxComputeWorkgroupsPerDimension
   }
 
   static async create(device: GPUDevice): Promise<FlamePipeline> {
@@ -145,6 +147,9 @@ export class FlamePipeline {
     this.histWidth = w
     this.histHeight = h
 
+    this.histogramBuffer?.destroy()
+    this.densityBuffer?.destroy()
+
     this.histogramBuffer = this.device.createBuffer({
       size: histSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
@@ -198,6 +203,87 @@ export class FlamePipeline {
     return kernel
   }
 
+  private createIterateBindGroup(): GPUBindGroup {
+    return this.device.createBindGroup({
+      layout: this.iteratePipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.paramsBuffer } },
+        { binding: 1, resource: { buffer: this.xformsBuffer } },
+        { binding: 2, resource: { buffer: this.paletteBuffer } },
+        { binding: 3, resource: { buffer: this.histogramBuffer } },
+      ],
+    })
+  }
+
+  private async runIterateBatches(flame: Flame, totalSamples: number) {
+    const maxThreads = this.maxWorkgroups * WORKGROUP_SIZE
+    const itersPerThread = 20
+    const threadsPerBatch = Math.min(totalSamples, maxThreads)
+    const totalBatches = Math.ceil(totalSamples / threadsPerBatch)
+
+    const clearEncoder = this.device.createCommandEncoder()
+    clearEncoder.clearBuffer(this.histogramBuffer)
+    this.device.queue.submit([clearEncoder.finish()])
+
+    const bindGroup = this.createIterateBindGroup()
+
+    for (let batch = 0; batch < totalBatches; batch++) {
+      const remaining = totalSamples - batch * threadsPerBatch
+      const batchThreads = Math.min(remaining, threadsPerBatch)
+      const threadOffset = batch * threadsPerBatch
+
+      const paramsData = buildParamsBuffer(flame, itersPerThread, threadOffset)
+      const u32 = new Uint32Array(paramsData)
+      u32[1] = batchThreads
+      this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
+
+      const encoder = this.device.createCommandEncoder()
+      const pass = encoder.beginComputePass()
+      pass.setPipeline(this.iteratePipeline)
+      pass.setBindGroup(0, bindGroup)
+      pass.dispatchWorkgroups(Math.ceil(batchThreads / WORKGROUP_SIZE))
+      pass.end()
+      this.device.queue.submit([encoder.finish()])
+
+      await this.device.queue.onSubmittedWorkDone()
+    }
+  }
+
+  private runPostIterate(histW: number, histH: number, outW: number, outH: number) {
+    const encoder = this.device.createCommandEncoder()
+
+    const pass2 = encoder.beginComputePass()
+    pass2.setPipeline(this.densityPipeline)
+    this.bindGroupDensity = this.device.createBindGroup({
+      layout: this.densityPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.paramsBuffer } },
+        { binding: 1, resource: { buffer: this.histogramBuffer } },
+        { binding: 2, resource: { buffer: this.densityBuffer } },
+      ],
+    })
+    pass2.setBindGroup(0, this.bindGroupDensity)
+    pass2.dispatchWorkgroups(Math.ceil(histW / 16), Math.ceil(histH / 16))
+    pass2.end()
+
+    const pass3 = encoder.beginComputePass()
+    pass3.setPipeline(this.filterPipeline)
+    this.bindGroupFilter = this.device.createBindGroup({
+      layout: this.filterPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.paramsBuffer } },
+        { binding: 1, resource: { buffer: this.densityBuffer } },
+        { binding: 2, resource: { buffer: this.gaussianBuffer } },
+        { binding: 3, resource: this.outputTexture.createView() },
+      ],
+    })
+    pass3.setBindGroup(0, this.bindGroupFilter)
+    pass3.dispatchWorkgroups(Math.ceil(outW / 16), Math.ceil(outH / 16))
+    pass3.end()
+
+    this.device.queue.submit([encoder.finish()])
+  }
+
   async render(flame: Flame, canvas: HTMLCanvasElement) {
     const oversample = flame.oversample
     const gutter = 20
@@ -209,12 +295,12 @@ export class FlamePipeline {
     this.ensureHistogramBuffers(histW, histH)
     this.ensureOutputTexture(outW, outH)
 
-    const paramsData = buildParamsBuffer(flame)
+    const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
+
     const xformsData = buildXFormBuffer(flame.xforms)
     const paletteData = buildPaletteBuffer(flame.palette)
     const gaussianData = this.buildGaussianKernel(oversample, flame.filterRadius)
 
-    this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
     this.device.queue.writeBuffer(this.xformsBuffer, 0, xformsData)
     this.device.queue.writeBuffer(this.paletteBuffer, 0, paletteData)
     this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussianData)
@@ -236,53 +322,12 @@ export class FlamePipeline {
       this.lastCanvasHeight = canvas.height
     }
 
-    const encoder = this.device.createCommandEncoder()
-    encoder.clearBuffer(this.histogramBuffer)
+    await this.runIterateBatches(flame, totalSamples)
 
-    const pass1 = encoder.beginComputePass()
-    pass1.setPipeline(this.iteratePipeline)
-    this.bindGroupIterate = this.device.createBindGroup({
-      layout: this.iteratePipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.paramsBuffer } },
-        { binding: 1, resource: { buffer: this.xformsBuffer } },
-        { binding: 2, resource: { buffer: this.paletteBuffer } },
-        { binding: 3, resource: { buffer: this.histogramBuffer } },
-      ],
-    })
-    pass1.setBindGroup(0, this.bindGroupIterate)
-    const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
-    pass1.dispatchWorkgroups(Math.ceil(totalSamples / WORKGROUP_SIZE))
-    pass1.end()
+    const paramsData = buildParamsBuffer(flame, 20, 0)
+    this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
 
-    const pass2 = encoder.beginComputePass()
-    pass2.setPipeline(this.densityPipeline)
-    this.bindGroupDensity = this.device.createBindGroup({
-      layout: this.densityPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.paramsBuffer } },
-        { binding: 1, resource: { buffer: this.histogramBuffer } },
-        { binding: 2, resource: { buffer: this.densityBuffer } },
-      ],
-    })
-    pass2.setBindGroup(0, this.bindGroupDensity)
-    pass2.dispatchWorkgroups(Math.ceil(histW / 16), Math.ceil(histH / 16))
-    pass2.end()
-
-    const pass3 = encoder.beginComputePass()
-    pass3.setPipeline(this.filterPipeline)
-    this.bindGroupFilter = this.device.createBindGroup({
-      layout: this.filterPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.paramsBuffer } },
-        { binding: 1, resource: { buffer: this.densityBuffer } },
-        { binding: 2, resource: { buffer: this.gaussianBuffer } },
-        { binding: 3, resource: this.outputTexture.createView() },
-      ],
-    })
-    pass3.setBindGroup(0, this.bindGroupFilter)
-    pass3.dispatchWorkgroups(Math.ceil(outW / 16), Math.ceil(outH / 16))
-    pass3.end()
+    this.runPostIterate(histW, histH, outW, outH)
 
     const displayPipeline = this.getDisplayPipeline(canvasFormat)
     const displayBindGroup = this.device.createBindGroup({
@@ -293,8 +338,9 @@ export class FlamePipeline {
       ],
     })
 
+    const displayEncoder = this.device.createCommandEncoder()
     const currentTexture = ctx.getCurrentTexture()
-    const pass4 = encoder.beginRenderPass({
+    const pass4 = displayEncoder.beginRenderPass({
       colorAttachments: [{
         view: currentTexture.createView(),
         clearValue: { r: 0, g: 0, b: 0, a: 1 },
@@ -306,8 +352,7 @@ export class FlamePipeline {
     pass4.setBindGroup(0, displayBindGroup)
     pass4.draw(6)
     pass4.end()
-
-    this.device.queue.submit([encoder.finish()])
+    this.device.queue.submit([displayEncoder.finish()])
 
     this.device.pushErrorScope('validation')
     const error = await this.device.popErrorScope()
@@ -327,78 +372,38 @@ export class FlamePipeline {
     this.ensureHistogramBuffers(histW, histH)
     this.ensureOutputTexture(outW, outH)
 
-    const paramsData = buildParamsBuffer(flame)
+    const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
+
     const xformsData = buildXFormBuffer(flame.xforms)
     const paletteData = buildPaletteBuffer(flame.palette)
     const gaussianData = this.buildGaussianKernel(oversample, flame.filterRadius)
 
-    this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
     this.device.queue.writeBuffer(this.xformsBuffer, 0, xformsData)
     this.device.queue.writeBuffer(this.paletteBuffer, 0, paletteData)
     this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussianData)
 
-    const encoder = this.device.createCommandEncoder()
-    encoder.clearBuffer(this.histogramBuffer)
+    await this.runIterateBatches(flame, totalSamples)
 
-    const pass1 = encoder.beginComputePass()
-    pass1.setPipeline(this.iteratePipeline)
-    this.bindGroupIterate = this.device.createBindGroup({
-      layout: this.iteratePipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.paramsBuffer } },
-        { binding: 1, resource: { buffer: this.xformsBuffer } },
-        { binding: 2, resource: { buffer: this.paletteBuffer } },
-        { binding: 3, resource: { buffer: this.histogramBuffer } },
-      ],
-    })
-    pass1.setBindGroup(0, this.bindGroupIterate)
-    const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
-    pass1.dispatchWorkgroups(Math.ceil(totalSamples / WORKGROUP_SIZE))
-    pass1.end()
+    const paramsData = buildParamsBuffer(flame, 20, 0)
+    this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
 
-    const pass2 = encoder.beginComputePass()
-    pass2.setPipeline(this.densityPipeline)
-    this.bindGroupDensity = this.device.createBindGroup({
-      layout: this.densityPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.paramsBuffer } },
-        { binding: 1, resource: { buffer: this.histogramBuffer } },
-        { binding: 2, resource: { buffer: this.densityBuffer } },
-      ],
-    })
-    pass2.setBindGroup(0, this.bindGroupDensity)
-    pass2.dispatchWorkgroups(Math.ceil(histW / 16), Math.ceil(histH / 16))
-    pass2.end()
-
-    const pass3 = encoder.beginComputePass()
-    pass3.setPipeline(this.filterPipeline)
-    this.bindGroupFilter = this.device.createBindGroup({
-      layout: this.filterPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: this.paramsBuffer } },
-        { binding: 1, resource: { buffer: this.densityBuffer } },
-        { binding: 2, resource: { buffer: this.gaussianBuffer } },
-        { binding: 3, resource: this.outputTexture.createView() },
-      ],
-    })
-    pass3.setBindGroup(0, this.bindGroupFilter)
-    pass3.dispatchWorkgroups(Math.ceil(outW / 16), Math.ceil(outH / 16))
-    pass3.end()
+    this.runPostIterate(histW, histH, outW, outH)
 
     const bytesPerRow = outW * 4
     const paddedBytesPerRow = Math.ceil(bytesPerRow / 256) * 256
+    const readbackEncoder = this.device.createCommandEncoder()
     const readbackBuffer = this.device.createBuffer({
       size: paddedBytesPerRow * outH,
       usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ,
     })
 
-    encoder.copyTextureToBuffer(
+    readbackEncoder.copyTextureToBuffer(
       { texture: this.outputTexture },
       { buffer: readbackBuffer, bytesPerRow: paddedBytesPerRow },
       { width: outW, height: outH },
     )
 
-    this.device.queue.submit([encoder.finish()])
+    this.device.queue.submit([readbackEncoder.finish()])
 
     await readbackBuffer.mapAsync(GPUMapMode.READ)
     const rawData = new Uint8Array(readbackBuffer.getMappedRange().slice(0))

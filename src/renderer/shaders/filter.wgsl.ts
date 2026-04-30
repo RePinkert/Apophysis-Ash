@@ -24,6 +24,8 @@ struct Params {
   bg_b: f32,
   out_width: u32,
   out_height: u32,
+  iters_per_thread: u32,
+  thread_offset: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
@@ -103,6 +105,6 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   fg = clamp(fg, 0.0, 1.0);
   fb = clamp(fb, 0.0, 1.0);
 
-  textureStore(output_tex, vec2u(ox, oy), vec4f(fr, fg, fb, 1.0));
+  textureStore(output_tex, vec2u(ox, oy), vec4f(fr, fg, fb, alpha));
 }
 `

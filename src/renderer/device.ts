@@ -11,8 +11,12 @@ export async function initWebGPU(): Promise<{
 
   const adapter = await navigator.gpu.requestAdapter({
     powerPreference: 'high-performance',
+    forceFallbackAdapter: false,
   })
   if (!adapter) return null
+
+  const adapterInfo = adapter.info ?? { vendor: 'Unknown', architecture: '', device: '', description: '' }
+  console.log(`[WebGPU] Adapter: ${adapterInfo.vendor} - ${adapterInfo.architecture} - ${adapterInfo.device} (${adapterInfo.description})`)
 
   const device = await adapter.requestDevice({
     requiredLimits: {
@@ -22,7 +26,6 @@ export async function initWebGPU(): Promise<{
     },
   })
 
-  const adapterInfo = adapter.info ?? { vendor: 'Unknown', architecture: '', device: '', description: '' }
   const deviceInfo = `${adapterInfo.vendor} - ${adapterInfo.architecture} - ${adapterInfo.device} (${adapterInfo.description})`
 
   return { adapter, device, info: deviceInfo }

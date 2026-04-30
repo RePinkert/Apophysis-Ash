@@ -41,7 +41,7 @@ export function buildPaletteBuffer(palette: Flame['palette']): Float32Array {
   return data
 }
 
-export function buildParamsBuffer(flame: Flame): ArrayBuffer {
+export function buildParamsBuffer(flame: Flame, itersPerThread: number = 20, threadOffset: number = 0): ArrayBuffer {
   const oversample = flame.oversample
   const gutterWidth = 20
   const ht = oversample * flame.height + 2 * gutterWidth
@@ -51,7 +51,7 @@ export function buildParamsBuffer(flame: Flame): ArrayBuffer {
   const prefilterWhite = 1024
   const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
 
-  const buffer = new ArrayBuffer(24 * 4)
+  const buffer = new ArrayBuffer(28 * 4)
   const u32 = new Uint32Array(buffer)
   const f32 = new Float32Array(buffer)
 
@@ -83,6 +83,8 @@ export function buildParamsBuffer(flame: Flame): ArrayBuffer {
 
   u32[22] = flame.width
   u32[23] = flame.height
+  u32[24] = itersPerThread
+  u32[25] = threadOffset
 
   return buffer
 }

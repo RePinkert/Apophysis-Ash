@@ -24,6 +24,8 @@ struct Params {
   bg_b: f32,
   out_width: u32,
   out_height: u32,
+  iters_per_thread: u32,
+  thread_offset: u32,
 }
 
 @group(0) @binding(0) var<uniform> params: Params;
