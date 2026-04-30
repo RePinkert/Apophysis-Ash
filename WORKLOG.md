@@ -307,3 +307,32 @@ ash/
   - **方案 B**: 在每个组件内分别添加 `@wheel` 处理器（重复代码多）
   - **select 特殊处理**: 滚轮上下切换选项（`selectedIndex += deltaY > 0 ? 1 : -1`）
 - **优先级**: 中 — 改善操作流畅度，属于 UX 打磨
+
+---
+
+## 开源准备
+
+### 仓库初始化
+
+- **目标仓库**: [RePinkert/Apophysis-Ash](https://github.com/RePinkert/Apophysis-Ash) — 仅上传 `ash/` 子目录
+- **许可证**: GPL v2 — 项目是原版 Apophysis 7X（GPL v2）的衍生作品（WGSL 着色器从 Delphi 源码翻译/改写），必须延续相同许可证
+- **仓库命名**: `Apophysis-Ash` — 兼顾原项目名和内部代号，便于搜索发现
+
+### 清理工作
+
+- **删除 Vite 脚手架残留**: `src/components/HelloWorld.vue`、`src/assets/hero.png`、`src/assets/vite.svg` — 均未被 App.vue 或其他业务组件引用
+- **.gitignore 补充**: 添加 `test-output.png`（Puppeteer 测试生成产物）
+
+### 新增文件
+
+- **LICENSE**: GNU General Public License v2.0 全文（从 gnu.org 获取）
+- **README.md**: 英文版 — 项目介绍、功能列表、技术栈、快速开始、项目结构、致谢、许可证
+- **README.zh-CN.md**: 中文版 — 同等内容，两个 README 顶部互相链接切换语言
+
+### 修改
+
+- **package.json**: `version` 从 `0.0.0` 改为 `0.1.0`
+
+### 已知遗留
+
+- `public/favicon.svg` 缺失 — `index.html` 引用了 `/favicon.svg` 但文件不存在，待后续处理
