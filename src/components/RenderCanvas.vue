@@ -7,7 +7,6 @@
       @mouseleave="onMouseUp"
       @wheel.prevent="onWheel"
       @contextmenu.prevent
-      :style="isInteracting ? canvasStyle : undefined"
     ></canvas>
     <div v-if="showRotateIndicator" class="rotate-indicator">
       {{ rotateDisplay }}°
@@ -16,7 +15,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useFlameStore } from '../stores/flame'
 import { useRendererStore } from '../stores/renderer'
 
@@ -27,7 +26,7 @@ const canvasRef = ref<HTMLCanvasElement | null>(null)
 
 let renderTimeout: ReturnType<typeof setTimeout> | null = null
 
-const isInteracting = ref(false)
+let isInteracting = false
 let interactionType: 'pan' | 'rotate' | 'zoom' | 'none' = 'none'
 let startFlameCenter: [number, number] = [0, 0]
 let startFlameScale = 0
@@ -45,19 +44,37 @@ let wheelTimer: ReturnType<typeof setTimeout> | null = null
 const showRotateIndicator = ref(false)
 const rotateDisplay = ref('0.0')
 
-const canvasStyle = computed(() => {
-  if (!isInteracting.value) return undefined
+function applyCSSTransform() {
+  const canvas = canvasRef.value
+  if (!canvas) return
+
   const parts: string[] = []
   if (cssDx !== 0 || cssDy !== 0) parts.push(`translate(${cssDx}px, ${cssDy}px)`)
   if (cssScaleAccum !== 1) parts.push(`scale(${cssScaleAccum})`)
   if (cssRotateAccum !== 0) parts.push(`rotate(${cssRotateAccum}deg)`)
-  if (parts.length === 0) return undefined
-  const style: Record<string, string> = { transform: parts.join(' '), transition: 'none' }
-  if (interactionType === 'zoom') {
-    style.transformOrigin = `${zoomOriginX}px ${zoomOriginY}px`
+
+  if (parts.length > 0) {
+    canvas.style.transform = parts.join(' ')
+    canvas.style.transition = 'none'
+  } else {
+    canvas.style.transform = ''
+    canvas.style.transition = ''
   }
-  return style
-})
+
+  if (interactionType === 'zoom') {
+    canvas.style.transformOrigin = `${zoomOriginX}px ${zoomOriginY}px`
+  } else {
+    canvas.style.transformOrigin = ''
+  }
+}
+
+function clearCSSTransform() {
+  const canvas = canvasRef.value
+  if (!canvas) return
+  canvas.style.transform = ''
+  canvas.style.transformOrigin = ''
+  canvas.style.transition = ''
+}
 
 function scheduleRender() {
   if (renderTimeout) clearTimeout(renderTimeout)
@@ -96,7 +113,7 @@ function getDisplayScale(): number {
 
 function beginInteraction(e: MouseEvent, type: 'pan' | 'rotate' | 'zoom') {
   const flame = flameStore.flame
-  isInteracting.value = true
+  isInteracting = true
   startMouseX = e.clientX
   startMouseY = e.clientY
   startFlameCenter = [...flame.center]
@@ -131,7 +148,7 @@ function onMouseDown(e: MouseEvent) {
 }
 
 function onMouseMove(e: MouseEvent) {
-  if (!isInteracting.value) return
+  if (!isInteracting) return
 
   const dx = e.clientX - startMouseX
   const dy = e.clientY - startMouseY
@@ -143,10 +160,12 @@ function onMouseMove(e: MouseEvent) {
     cssRotateAccum = dx * 0.3
     rotateDisplay.value = (startFlameRotate + cssRotateAccum).toFixed(1)
   }
+
+  applyCSSTransform()
 }
 
 function onMouseUp() {
-  if (!isInteracting.value) return
+  if (!isInteracting) return
   if (interactionType === 'pan' || interactionType === 'rotate') {
     commitDrag()
   }
@@ -175,12 +194,14 @@ function onWheel(e: WheelEvent) {
   const canvas = canvasRef.value
   if (!canvas) return
 
-  if (!isInteracting.value || interactionType !== 'zoom') {
+  if (!isInteracting || interactionType !== 'zoom') {
     beginInteraction(e as unknown as MouseEvent, 'zoom')
   }
 
   const zoomFactor = e.deltaY > 0 ? 0.9 : 1.1
   cssScaleAccum *= zoomFactor
+
+  applyCSSTransform()
 
   if (wheelTimer) clearTimeout(wheelTimer)
   wheelTimer = setTimeout(() => {
@@ -237,13 +258,14 @@ function commitWheel() {
 }
 
 function resetInteraction() {
-  isInteracting.value = false
+  isInteracting = false
   interactionType = 'none'
   cssDx = 0
   cssDy = 0
   cssScaleAccum = 1
   cssRotateAccum = 0
   showRotateIndicator.value = false
+  clearCSSTransform()
 }
 
 watch(() => flameStore.flame, scheduleRender, { deep: true })
