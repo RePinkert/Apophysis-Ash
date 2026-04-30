@@ -41,17 +41,17 @@ async function doRender() {
   canvasRef.value.width = flame.width
   canvasRef.value.height = flame.height
 
-  rendererStore.isRendering = true
-  const t0 = performance.now()
+    rendererStore.isRendering = true
+    const t0 = performance.now()
 
-  try {
-    await rendererStore.engine.render(flame, canvasRef.value)
-    rendererStore.lastRenderTime = performance.now() - t0
-  } catch (e) {
-    console.error('Render error:', e)
-  }
+    try {
+      await rendererStore.engine.render(flame, canvasRef.value, rendererStore.onProgress)
+      rendererStore.lastRenderTime = performance.now() - t0
+    } catch (e) {
+      console.error('Render error:', e)
+    }
 
-  rendererStore.isRendering = false
+    rendererStore.isRendering = false
 }
 
 function canvasToFlameOffset(dx: number, dy: number): [number, number] {

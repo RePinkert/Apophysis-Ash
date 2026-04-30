@@ -50,4 +50,10 @@ export default {
     notAvailable: 'WebGPU 不可用',
     notAvailableMsg: '当前浏览器不支持 WebGPU。请使用 Chrome 113+、Edge 113+ 或 Safari 18+。',
   },
+  progress: {
+    iterating: '迭代中',
+    density: '密度估计',
+    filtering: '滤波中',
+    displaying: '显示中',
+  },
 }

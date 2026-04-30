@@ -436,3 +436,114 @@ ash/
 | 3840x2160 quality=4000 oversample=2 | **PASS** | 98,617 |
 
 **目标达成**: 4K 分辨率 + 原版渲染质量 4000 + oversample 2，不动任何用户设置即可成功渲染
+
+---
+
+## 渲染性能优化轮 2（autoresearch 风格迭代实验）
+
+### 方法论
+
+采用 [Karpathy autoresearch](https://github.com/karpathy/autoresearch) 风格的自动化实验循环：
+- 基准测试配置: `3840×2160 quality=4000 oversample=3`（os6 因直方图缓冲区超出 maxBufferSize 2048MB 不可用）
+- 每次实验只改一处 → 跑 `bench-render.mjs` → keep/discard → 记录到 `bench-results.tsv`
+- 3840×2160 os6 直方图 = `(6×3840+40)×(6×2160+40)×16` ≈ 4.48GB，超出 GPU maxBuffer 2048MB
+
+### 基线
+
+| 配置 | 状态 | render_ms |
+|------|------|-----------|
+| 3840×2160 q4000 os3 | PASS | 46,265 |
+
+### E2: 提高 iters_per_thread (20→100) ✅
+
+- **改动**: `pipeline.ts` 新增 `ITERS_PER_THREAD = 100` 常量；`runIterateBatches` 中 `totalThreads = totalSamples / (itersPerThread / 20)`，保持总迭代次数不变但减少线程数 5x，从而减少 dispatch 批次数（220→44）
+- **结果**: 45,765ms (-1.1%)
+- **原理**: 每线程 100 次迭代 + 20 次 fuse = 120 次，fuse 开销 17%（原 40 次，fuse 开销 50%）。减少批次数降低 CPU→GPU 同步开销
+
+### E3+E4: 移除逐批 GPU 同步 — DISCARD
+
+- **改动**: `runIterateBatches` 中移除每批 `await onSubmittedWorkDone()`，仅在循环结束后同步一次
+- **结果**: 46,183ms（+0.9% vs E2 单独）
+- **根因**: `writeBuffer` 到同一 params buffer 仍会将 GPU 执行序列化，移除 sync 无实际收益
+
+### E5: 预构建 params buffer ✅
+
+- **改动**: `runIterateBatches` 中预构建 `baseParams` ArrayBuffer，每批仅修改 3 个 u32 字段（num_samples、iters_per_thread、thread_offset）后整体 writeBuffer
+- **结果**: 45,657ms (-0.2% vs E2)
+- **决策**: 保留——代码简化，性能持平或微优
+
+### E6: Workgroup size 调优 — DISCARD
+
+- **wg=128**: 45,917ms (+0.6%) — 更差
+- **wg=64**: 46,245ms (+1.3%) — 更差
+- **结论**: RTX 3060 上 wg=256 最优
+
+### E9: Fuse 周期缩减 — DISCARD
+
+- **fuse=5**: 46,000ms (+0.8%) — 反而更慢
+- **fuse=10**: 45,824ms (+0.4%) — 也更慢
+- **根因**: 较短的 fuse 使线程在 IFS 轨迹未收敛时即写入直方图，命中离群像素，导致更多 cache miss。fuse=20 实际上改善了直方图写入的缓存局部性
+
+### 性能瓶颈分析
+
+迭代 pass 占总渲染时间 >99%。瓶颈为 GPU 端固有特征：
+1. **atomicAdd 争用**: 所有线程随机写入大型直方图 buffer，无空间局部性，无法利用 workgroup 共享内存
+2. **超越函数开销**: sin/cos/atan2/sqrt/pow 在变体计算中大量使用
+3. **理论利用率**: ~7% of peak FLOPS（混合工作负载，atomics + 分支发散 + 超越函数）
+
+### 最终验证
+
+| 配置 | 状态 | render_ms |
+|------|------|-----------|
+| 3840×2160 q4000 os3 | **PASS** | 45,657 |
+
+**总提升**: 46,265ms → 45,657ms = **-1.3%**
+
+---
+
+## 进度条实现
+
+### 目标
+
+渲染 4K q4000 级别的图像需 ~46 秒，用户无法得知进度。需要进度反馈。
+
+### 实现方案: Toolbar 内嵌进度条
+
+利用多批次 iterate 的天然进度节点（每批 `onSubmittedWorkDone()` 完成后回调）。
+
+#### 1. 类型层 (`types/renderer.ts`)
+
+- 扩展 `RenderProgress` 接口: 新增 `stage`（iterating/density/filtering/displaying/done）、`batchCompleted`、`totalBatches`、`percentage`
+- 新增 `RenderProgressCallback` 类型
+
+#### 2. Pipeline 层 (`renderer/pipeline.ts`)
+
+- `runIterateBatches()` 新增 `onProgress?` 参数，每批完成后触发 `stage: 'iterating', percentage: round(batch/total × 90)`
+- `render()` 新增 `onProgress?` 参数：iterate 后触发 `density`（92%）、`displaying`（98%）、`done`（100%）
+- `renderToImageData()` 同样支持 `onProgress`
+
+#### 3. Engine 层 (`renderer/engine.ts`)
+
+- `render()` / `renderToImageData()` 透传 `onProgress`
+
+#### 4. Store 层 (`stores/renderer.ts`)
+
+- 新增 `renderProgress: ref<RenderProgress | null>(null)`
+- 新增 `onProgress(progress)` 方法更新 reactive ref
+
+#### 5. UI 层 (`components/Toolbar.vue`)
+
+- 渲染按钮旁新增内嵌进度条: `<div class="progress-bar">` + `<div class="progress-fill">` + 阶段文字 + 百分比
+- `computed stageLabel` 根据 `rendererStore.renderProgress.stage` 显示 i18n 标签
+- 进度条样式: 120px 宽，绿色渐变填充，0.15s ease-out 过渡动画
+
+#### 6. 国际化 (`i18n/locales/`)
+
+- `zh-CN.ts`: 迭代中 / 密度估计 / 滤波中 / 显示中
+- `en.ts`: Iterating / Estimating density / Filtering / Displaying
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（179KB gzipped 63KB）
+- `bench-render.mjs` 4K q4000 os3 ✅ (45,756ms)

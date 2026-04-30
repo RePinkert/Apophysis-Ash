@@ -1,5 +1,6 @@
 import type { Flame } from '../types/flame'
 import { MAX_XFORMS, WORKGROUP_SIZE } from '../types/renderer'
+import type { RenderProgressCallback } from '../types/renderer'
 import { buildXFormBuffer, buildPaletteBuffer, buildParamsBuffer } from './buffers'
 import { VARIATIONS_WGSL } from './shaders/variations.wgsl'
 import { ITERATE_SHADER } from './shaders/iterate.wgsl'
@@ -11,6 +12,7 @@ const PARAMS_SIZE = 28 * 4
 const XFORMS_BUFFER_SIZE = MAX_XFORMS * 34 * 4
 const PALETTE_BUFFER_SIZE = 256 * 4 * 4
 const MAX_FILTER_WIDTH = 20
+const ITERS_PER_THREAD = 100
 
 export class FlamePipeline {
   private device: GPUDevice
@@ -29,7 +31,6 @@ export class FlamePipeline {
   private outputTexture!: GPUTexture
   private sampler!: GPUSampler
 
-  private bindGroupIterate!: GPUBindGroup
   private bindGroupDensity!: GPUBindGroup
   private bindGroupFilter!: GPUBindGroup
 
@@ -215,11 +216,12 @@ export class FlamePipeline {
     })
   }
 
-  private async runIterateBatches(flame: Flame, totalSamples: number) {
+  private async runIterateBatches(flame: Flame, totalSamples: number, onProgress?: RenderProgressCallback) {
     const maxThreads = this.maxWorkgroups * WORKGROUP_SIZE
-    const itersPerThread = 20
-    const threadsPerBatch = Math.min(totalSamples, maxThreads)
-    const totalBatches = Math.ceil(totalSamples / threadsPerBatch)
+    const itersPerThread = ITERS_PER_THREAD
+    const totalThreads = Math.max(1, Math.round(totalSamples / (itersPerThread / 20)))
+    const threadsPerBatch = Math.min(totalThreads, maxThreads)
+    const totalBatches = Math.ceil(totalThreads / threadsPerBatch)
 
     const clearEncoder = this.device.createCommandEncoder()
     clearEncoder.clearBuffer(this.histogramBuffer)
@@ -227,15 +229,18 @@ export class FlamePipeline {
 
     const bindGroup = this.createIterateBindGroup()
 
+    const baseParams = buildParamsBuffer(flame, itersPerThread, 0)
+    const u32 = new Uint32Array(baseParams)
+
     for (let batch = 0; batch < totalBatches; batch++) {
-      const remaining = totalSamples - batch * threadsPerBatch
+      const remaining = totalThreads - batch * threadsPerBatch
       const batchThreads = Math.min(remaining, threadsPerBatch)
       const threadOffset = batch * threadsPerBatch
 
-      const paramsData = buildParamsBuffer(flame, itersPerThread, threadOffset)
-      const u32 = new Uint32Array(paramsData)
       u32[1] = batchThreads
-      this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
+      u32[24] = itersPerThread
+      u32[25] = threadOffset
+      this.device.queue.writeBuffer(this.paramsBuffer, 0, baseParams)
 
       const encoder = this.device.createCommandEncoder()
       const pass = encoder.beginComputePass()
@@ -246,6 +251,15 @@ export class FlamePipeline {
       this.device.queue.submit([encoder.finish()])
 
       await this.device.queue.onSubmittedWorkDone()
+
+      if (onProgress) {
+        onProgress({
+          stage: 'iterating',
+          batchCompleted: batch + 1,
+          totalBatches,
+          percentage: Math.round((batch + 1) / totalBatches * 90),
+        })
+      }
     }
   }
 
@@ -284,7 +298,7 @@ export class FlamePipeline {
     this.device.queue.submit([encoder.finish()])
   }
 
-  async render(flame: Flame, canvas: HTMLCanvasElement) {
+  async render(flame: Flame, canvas: HTMLCanvasElement, onProgress?: RenderProgressCallback) {
     const oversample = flame.oversample
     const gutter = 20
     const histW = oversample * flame.width + 2 * gutter
@@ -322,12 +336,16 @@ export class FlamePipeline {
       this.lastCanvasHeight = canvas.height
     }
 
-    await this.runIterateBatches(flame, totalSamples)
+    await this.runIterateBatches(flame, totalSamples, onProgress)
+
+    onProgress?.({ stage: 'density', batchCompleted: 0, totalBatches: 1, percentage: 92 })
 
     const paramsData = buildParamsBuffer(flame, 20, 0)
     this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
 
     this.runPostIterate(histW, histH, outW, outH)
+
+    onProgress?.({ stage: 'displaying', batchCompleted: 0, totalBatches: 1, percentage: 98 })
 
     const displayPipeline = this.getDisplayPipeline(canvasFormat)
     const displayBindGroup = this.device.createBindGroup({
@@ -359,9 +377,11 @@ export class FlamePipeline {
     if (error) {
       console.error('[FlamePipeline] GPU validation error:', error.message)
     }
+
+    onProgress?.({ stage: 'done', batchCompleted: 1, totalBatches: 1, percentage: 100 })
   }
 
-  async renderToImageData(flame: Flame): Promise<ImageData | null> {
+  async renderToImageData(flame: Flame, onProgress?: RenderProgressCallback): Promise<ImageData | null> {
     const oversample = flame.oversample
     const gutter = 20
     const histW = oversample * flame.width + 2 * gutter
@@ -382,12 +402,16 @@ export class FlamePipeline {
     this.device.queue.writeBuffer(this.paletteBuffer, 0, paletteData)
     this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussianData)
 
-    await this.runIterateBatches(flame, totalSamples)
+    await this.runIterateBatches(flame, totalSamples, onProgress)
+
+    onProgress?.({ stage: 'density', batchCompleted: 0, totalBatches: 1, percentage: 92 })
 
     const paramsData = buildParamsBuffer(flame, 20, 0)
     this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
 
     this.runPostIterate(histW, histH, outW, outH)
+
+    onProgress?.({ stage: 'displaying', batchCompleted: 0, totalBatches: 1, percentage: 98 })
 
     const bytesPerRow = outW * 4
     const paddedBytesPerRow = Math.ceil(bytesPerRow / 256) * 256
@@ -421,6 +445,8 @@ export class FlamePipeline {
         imageData.data[dstIdx + 3] = rawData[srcIdx + 3]
       }
     }
+
+    onProgress?.({ stage: 'done', batchCompleted: 1, totalBatches: 1, percentage: 100 })
 
     return imageData
   }

@@ -19,7 +19,13 @@
       <button @click="$emit('render')" :disabled="!gpuSupported">
         {{ isRendering ? t('toolbar.rendering') : t('toolbar.render') }}
       </button>
-      <span v-if="lastRenderTime > 0" class="render-time">
+      <div v-if="isRendering && rendererStore.renderProgress" class="progress-container">
+        <div class="progress-bar">
+          <div class="progress-fill" :style="{ width: rendererStore.renderProgress.percentage + '%' }"></div>
+        </div>
+        <span class="progress-text">{{ stageLabel }} {{ rendererStore.renderProgress.percentage }}%</span>
+      </div>
+      <span v-if="!isRendering && lastRenderTime > 0" class="render-time">
         {{ lastRenderTime.toFixed(0) }}ms
       </span>
     </div>
@@ -32,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useFlameStore } from '../stores/flame'
 import { useRendererStore } from '../stores/renderer'
 import { useI18n } from '../i18n'
@@ -54,6 +60,15 @@ const availableLocales = getAvailableLocales()
 const lang = ref('zh-CN')
 const templates = ref<Flame[]>([])
 const selectedTemplate = ref('')
+
+const stageLabel = computed(() => {
+  const stage = rendererStore.renderProgress?.stage
+  if (stage === 'iterating') return t('progress.iterating')
+  if (stage === 'density') return t('progress.density')
+  if (stage === 'filtering') return t('progress.filtering')
+  if (stage === 'displaying') return t('progress.displaying')
+  return ''
+})
 
 onMounted(async () => {
   templates.value = await flameStore.loadDefaultTemplates()
@@ -84,7 +99,7 @@ function onSaveJSON() {
 
 async function onExportPNG() {
   if (!rendererStore.engine) return
-  const imageData = await rendererStore.engine.renderToImageData(flameStore.flame)
+  const imageData = await rendererStore.engine.renderToImageData(flameStore.flame, rendererStore.onProgress)
   if (!imageData) return
   const c = document.createElement('canvas')
   c.width = imageData.width
@@ -160,6 +175,34 @@ button:disabled {
   color: #8f8;
   font-size: 12px;
   font-family: monospace;
+}
+
+.progress-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-bar {
+  width: 120px;
+  height: 10px;
+  background: #0a0a1a;
+  border: 1px solid #444;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #1a6a3e, #2a9a5e);
+  transition: width 0.15s ease-out;
+}
+
+.progress-text {
+  color: #aaa;
+  font-size: 11px;
+  font-family: monospace;
+  white-space: nowrap;
 }
 
 .lang-select {

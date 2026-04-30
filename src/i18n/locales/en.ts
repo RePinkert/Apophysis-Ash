@@ -50,4 +50,10 @@ export default {
     notAvailable: 'WebGPU Not Available',
     notAvailableMsg: 'WebGPU is not supported on this browser. Please use Chrome 113+, Edge 113+, or Safari 18+.',
   },
+  progress: {
+    iterating: 'Iterating',
+    density: 'Estimating density',
+    filtering: 'Filtering',
+    displaying: 'Displaying',
+  },
 }

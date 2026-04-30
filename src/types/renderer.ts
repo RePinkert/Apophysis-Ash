@@ -35,10 +35,13 @@ export interface GPURenderParams {
 }
 
 export interface RenderProgress {
-  stage: 'iterating' | 'density' | 'filtering' | 'done'
-  samplesCompleted: number
-  totalSamples: number
+  stage: 'iterating' | 'density' | 'filtering' | 'displaying' | 'done'
+  batchCompleted: number
+  totalBatches: number
+  percentage: number
 }
+
+export type RenderProgressCallback = (progress: RenderProgress) => void
 
 export const MAX_XFORMS = 12
 export const MAX_VARIATIONS = 23

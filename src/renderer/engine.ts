@@ -1,6 +1,7 @@
 import { initWebGPU, isWebGPUSupported } from './device'
 import { FlamePipeline } from './pipeline'
 import type { Flame } from '../types/flame'
+import type { RenderProgressCallback } from '../types/renderer'
 
 export class FlameEngine {
   private device: GPUDevice | null = null
@@ -43,14 +44,14 @@ export class FlameEngine {
     return true
   }
 
-  async render(flame: Flame, canvas: HTMLCanvasElement) {
+  async render(flame: Flame, canvas: HTMLCanvasElement, onProgress?: RenderProgressCallback) {
     if (!this.pipeline || !this._supported) return
-    await this.pipeline.render(flame, canvas)
+    await this.pipeline.render(flame, canvas, onProgress)
   }
 
-  async renderToImageData(flame: Flame): Promise<ImageData | null> {
+  async renderToImageData(flame: Flame, onProgress?: RenderProgressCallback): Promise<ImageData | null> {
     if (!this.pipeline || !this._supported) return null
-    return this.pipeline.renderToImageData(flame)
+    return this.pipeline.renderToImageData(flame, onProgress)
   }
 
   destroy() {

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { FlameEngine } from '../renderer/engine'
+import type { RenderProgress } from '../types/renderer'
 
 export const useRendererStore = defineStore('renderer', () => {
   const engine = ref<FlameEngine | null>(null)
@@ -10,6 +11,11 @@ export const useRendererStore = defineStore('renderer', () => {
   const gpuInfo = ref('')
   const errorMessage = ref('')
   const lastRenderTime = ref(0)
+  const renderProgress = ref<RenderProgress | null>(null)
+
+  function onProgress(progress: RenderProgress) {
+    renderProgress.value = progress
+  }
 
   async function init() {
     const eng = new FlameEngine()
@@ -39,6 +45,8 @@ export const useRendererStore = defineStore('renderer', () => {
     gpuInfo,
     errorMessage,
     lastRenderTime,
+    renderProgress,
+    onProgress,
     init,
     destroy,
   }
