@@ -69,3 +69,5 @@ src/
 ## 许可证
 
 本项目基于 [GNU General Public License v2.0](./LICENSE) 开源，与原版 Apophysis 7X 保持一致。
+
+网站图标由 RePinkert 创作，采用 [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/) 协议授权。

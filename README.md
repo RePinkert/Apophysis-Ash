@@ -69,3 +69,5 @@ This project is a modern rewrite based on the rendering algorithms of [Apophysis
 ## License
 
 This project is licensed under the [GNU General Public License v2.0](./LICENSE), consistent with the original Apophysis 7X.
+
+The favicon image is by RePinkert, licensed under [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/).
