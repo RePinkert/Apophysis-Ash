@@ -3,9 +3,9 @@ import { MAX_XFORMS, WORKGROUP_SIZE } from '../types/renderer'
 import type { RenderProgressCallback } from '../types/renderer'
 import { buildXFormBuffer, buildPaletteBuffer, buildParamsBuffer } from './buffers'
 import { VARIATIONS_WGSL } from './shaders/variations.wgsl'
-import { ITERATE_SHADER } from './shaders/iterate.wgsl'
+import { ITERATE_SHADER, ITERATE_COMPACT_SHADER } from './shaders/iterate.wgsl'
 import { DENSITY_SHADER } from './shaders/density.wgsl'
-import { FILTER_SHADER } from './shaders/filter.wgsl'
+import { FILTER_SHADER, FILTER_COMPACT_SHADER } from './shaders/filter.wgsl'
 import { DISPLAY_SHADER_VERT, DISPLAY_SHADER_FRAG } from './shaders/display.wgsl'
 
 const PARAMS_SIZE = 28 * 4
@@ -19,20 +19,20 @@ export class FlamePipeline {
   private iteratePipeline!: GPUComputePipeline
   private densityPipeline!: GPUComputePipeline
   private filterPipeline!: GPUComputePipeline
+  private iterateCompactPipeline!: GPUComputePipeline
+  private filterCompactPipeline!: GPUComputePipeline
   private displayPipelineCache: Map<string, GPURenderPipeline> = new Map()
 
   private maxWorkgroups: number
+  private maxBufferSize: number
   private paramsBuffer!: GPUBuffer
   private xformsBuffer!: GPUBuffer
   private paletteBuffer!: GPUBuffer
   private histogramBuffer!: GPUBuffer
-  private densityBuffer!: GPUBuffer
+  private densityBuffer!: GPUBuffer | null
   private gaussianBuffer!: GPUBuffer
   private outputTexture!: GPUTexture
   private sampler!: GPUSampler
-
-  private bindGroupDensity!: GPUBindGroup
-  private bindGroupFilter!: GPUBindGroup
 
   private canvasWidth = 0
   private canvasHeight = 0
@@ -45,6 +45,7 @@ export class FlamePipeline {
   private constructor(device: GPUDevice) {
     this.device = device
     this.maxWorkgroups = device.limits.maxComputeWorkgroupsPerDimension
+    this.maxBufferSize = device.limits.maxBufferSize
   }
 
   static async create(device: GPUDevice): Promise<FlamePipeline> {
@@ -68,8 +69,9 @@ export class FlamePipeline {
   }
 
   private async createPipelines() {
-    const iterateCode = ITERATE_SHADER.replace('// __VARIATIONS_PLACEHOLDER__', VARIATIONS_WGSL)
+    const varCode = VARIATIONS_WGSL
 
+    const iterateCode = ITERATE_SHADER.replace('// __VARIATIONS_PLACEHOLDER__', varCode)
     const iterateModule = this.device.createShaderModule({ code: iterateCode })
     await this.checkShader(iterateModule, 'iterate')
     this.iteratePipeline = this.device.createComputePipeline({
@@ -89,6 +91,21 @@ export class FlamePipeline {
     this.filterPipeline = this.device.createComputePipeline({
       layout: 'auto',
       compute: { module: filterModule, entryPoint: 'main' },
+    })
+
+    const iterateCompactCode = ITERATE_COMPACT_SHADER.replace('// __VARIATIONS_PLACEHOLDER__', varCode)
+    const iterateCompactModule = this.device.createShaderModule({ code: iterateCompactCode })
+    await this.checkShader(iterateCompactModule, 'iterate-compact')
+    this.iterateCompactPipeline = this.device.createComputePipeline({
+      layout: 'auto',
+      compute: { module: iterateCompactModule, entryPoint: 'main' },
+    })
+
+    const filterCompactModule = this.device.createShaderModule({ code: FILTER_COMPACT_SHADER })
+    await this.checkShader(filterCompactModule, 'filter-compact')
+    this.filterCompactPipeline = this.device.createComputePipeline({
+      layout: 'auto',
+      compute: { module: filterCompactModule, entryPoint: 'main' },
     })
 
     this.sampler = this.device.createSampler({
@@ -141,8 +158,15 @@ export class FlamePipeline {
     })
   }
 
-  private ensureHistogramBuffers(w: number, h: number) {
-    const histSize = w * h * 4 * 4
+  private useCompactPath(histW: number, histH: number): boolean {
+    const histBytesOrig = histW * histH * 4 * 4
+    const densityBytes = histW * histH * 4 * 4
+    return (histBytesOrig > this.maxBufferSize || densityBytes > this.maxBufferSize)
+  }
+
+  private ensureHistogramBuffer(w: number, h: number, compact: boolean) {
+    const channelsPerPx = compact ? 2 : 4
+    const histSize = w * h * channelsPerPx * 4
     if (w === this.histWidth && h === this.histHeight && this.histogramBuffer) return
 
     this.histWidth = w
@@ -150,16 +174,27 @@ export class FlamePipeline {
 
     this.histogramBuffer?.destroy()
     this.densityBuffer?.destroy()
+    this.densityBuffer = null
+
+    if (histSize > this.maxBufferSize) {
+      throw new Error(
+        `Histogram buffer ${histSize} bytes exceeds GPU maxBufferSize ${this.maxBufferSize} bytes. ` +
+        `Reduce resolution or oversample.`
+      )
+    }
 
     this.histogramBuffer = this.device.createBuffer({
       size: histSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     })
 
-    this.densityBuffer = this.device.createBuffer({
-      size: w * h * 4 * 4,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    })
+    if (!compact) {
+      const densitySize = w * h * 4 * 4
+      this.densityBuffer = this.device.createBuffer({
+        size: densitySize,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      })
+    }
   }
 
   private ensureOutputTexture(outW: number, outH: number) {
@@ -204,9 +239,10 @@ export class FlamePipeline {
     return kernel
   }
 
-  private createIterateBindGroup(): GPUBindGroup {
+  private createIterateBindGroup(compact: boolean): GPUBindGroup {
+    const pipeline = compact ? this.iterateCompactPipeline : this.iteratePipeline
     return this.device.createBindGroup({
-      layout: this.iteratePipeline.getBindGroupLayout(0),
+      layout: pipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: this.paramsBuffer } },
         { binding: 1, resource: { buffer: this.xformsBuffer } },
@@ -216,18 +252,20 @@ export class FlamePipeline {
     })
   }
 
-  private async runIterateBatches(flame: Flame, totalSamples: number, onProgress?: RenderProgressCallback) {
+  private async runIterateBatches(flame: Flame, totalSamples: number, compact: boolean, onProgress?: RenderProgressCallback) {
     const maxThreads = this.maxWorkgroups * WORKGROUP_SIZE
     const itersPerThread = ITERS_PER_THREAD
     const totalThreads = Math.max(1, Math.round(totalSamples / (itersPerThread / 20)))
-    const threadsPerBatch = Math.min(totalThreads, maxThreads)
+    const maxThreadsPerBatch = compact ? Math.min(maxThreads, 8_000_000) : maxThreads
+    const threadsPerBatch = Math.min(totalThreads, maxThreadsPerBatch)
     const totalBatches = Math.ceil(totalThreads / threadsPerBatch)
 
     const clearEncoder = this.device.createCommandEncoder()
     clearEncoder.clearBuffer(this.histogramBuffer)
     this.device.queue.submit([clearEncoder.finish()])
 
-    const bindGroup = this.createIterateBindGroup()
+    const bindGroup = this.createIterateBindGroup(compact)
+    const pipeline = compact ? this.iterateCompactPipeline : this.iteratePipeline
 
     const baseParams = buildParamsBuffer(flame, itersPerThread, 0)
     const u32 = new Uint32Array(baseParams)
@@ -244,7 +282,7 @@ export class FlamePipeline {
 
       const encoder = this.device.createCommandEncoder()
       const pass = encoder.beginComputePass()
-      pass.setPipeline(this.iteratePipeline)
+      pass.setPipeline(pipeline)
       pass.setBindGroup(0, bindGroup)
       pass.dispatchWorkgroups(Math.ceil(batchThreads / WORKGROUP_SIZE))
       pass.end()
@@ -263,37 +301,58 @@ export class FlamePipeline {
     }
   }
 
-  private runPostIterate(histW: number, histH: number, outW: number, outH: number) {
+  private runPostIterateOriginal(histW: number, histH: number, outW: number, outH: number) {
     const encoder = this.device.createCommandEncoder()
 
     const pass2 = encoder.beginComputePass()
     pass2.setPipeline(this.densityPipeline)
-    this.bindGroupDensity = this.device.createBindGroup({
+    const bindGroupDensity = this.device.createBindGroup({
       layout: this.densityPipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: this.paramsBuffer } },
         { binding: 1, resource: { buffer: this.histogramBuffer } },
-        { binding: 2, resource: { buffer: this.densityBuffer } },
+        { binding: 2, resource: { buffer: this.densityBuffer! } },
       ],
     })
-    pass2.setBindGroup(0, this.bindGroupDensity)
+    pass2.setBindGroup(0, bindGroupDensity)
     pass2.dispatchWorkgroups(Math.ceil(histW / 16), Math.ceil(histH / 16))
     pass2.end()
 
     const pass3 = encoder.beginComputePass()
     pass3.setPipeline(this.filterPipeline)
-    this.bindGroupFilter = this.device.createBindGroup({
+    const bindGroupFilter = this.device.createBindGroup({
       layout: this.filterPipeline.getBindGroupLayout(0),
       entries: [
         { binding: 0, resource: { buffer: this.paramsBuffer } },
-        { binding: 1, resource: { buffer: this.densityBuffer } },
+        { binding: 1, resource: { buffer: this.densityBuffer! } },
         { binding: 2, resource: { buffer: this.gaussianBuffer } },
         { binding: 3, resource: this.outputTexture.createView() },
       ],
     })
-    pass3.setBindGroup(0, this.bindGroupFilter)
+    pass3.setBindGroup(0, bindGroupFilter)
     pass3.dispatchWorkgroups(Math.ceil(outW / 16), Math.ceil(outH / 16))
     pass3.end()
+
+    this.device.queue.submit([encoder.finish()])
+  }
+
+  private runPostIterateCompact(outW: number, outH: number) {
+    const encoder = this.device.createCommandEncoder()
+
+    const pass = encoder.beginComputePass()
+    pass.setPipeline(this.filterCompactPipeline)
+    const bindGroup = this.device.createBindGroup({
+      layout: this.filterCompactPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: this.paramsBuffer } },
+        { binding: 1, resource: { buffer: this.histogramBuffer } },
+        { binding: 2, resource: { buffer: this.gaussianBuffer } },
+        { binding: 3, resource: this.outputTexture.createView() },
+      ],
+    })
+    pass.setBindGroup(0, bindGroup)
+    pass.dispatchWorkgroups(Math.ceil(outW / 16), Math.ceil(outH / 16))
+    pass.end()
 
     this.device.queue.submit([encoder.finish()])
   }
@@ -305,8 +364,9 @@ export class FlamePipeline {
     const histH = oversample * flame.height + 2 * gutter
     const outW = flame.width
     const outH = flame.height
+    const compact = this.useCompactPath(histW, histH)
 
-    this.ensureHistogramBuffers(histW, histH)
+    this.ensureHistogramBuffer(histW, histH, compact)
     this.ensureOutputTexture(outW, outH)
 
     const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
@@ -336,14 +396,18 @@ export class FlamePipeline {
       this.lastCanvasHeight = canvas.height
     }
 
-    await this.runIterateBatches(flame, totalSamples, onProgress)
-
-    onProgress?.({ stage: 'density', batchCompleted: 0, totalBatches: 1, percentage: 92 })
+    await this.runIterateBatches(flame, totalSamples, compact, onProgress)
 
     const paramsData = buildParamsBuffer(flame, 20, 0)
     this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
 
-    this.runPostIterate(histW, histH, outW, outH)
+    if (compact) {
+      onProgress?.({ stage: 'filtering', batchCompleted: 0, totalBatches: 1, percentage: 93 })
+      this.runPostIterateCompact(outW, outH)
+    } else {
+      onProgress?.({ stage: 'density', batchCompleted: 0, totalBatches: 1, percentage: 92 })
+      this.runPostIterateOriginal(histW, histH, outW, outH)
+    }
 
     onProgress?.({ stage: 'displaying', batchCompleted: 0, totalBatches: 1, percentage: 98 })
 
@@ -388,8 +452,9 @@ export class FlamePipeline {
     const histH = oversample * flame.height + 2 * gutter
     const outW = flame.width
     const outH = flame.height
+    const compact = this.useCompactPath(histW, histH)
 
-    this.ensureHistogramBuffers(histW, histH)
+    this.ensureHistogramBuffer(histW, histH, compact)
     this.ensureOutputTexture(outW, outH)
 
     const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
@@ -402,14 +467,18 @@ export class FlamePipeline {
     this.device.queue.writeBuffer(this.paletteBuffer, 0, paletteData)
     this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussianData)
 
-    await this.runIterateBatches(flame, totalSamples, onProgress)
-
-    onProgress?.({ stage: 'density', batchCompleted: 0, totalBatches: 1, percentage: 92 })
+    await this.runIterateBatches(flame, totalSamples, compact, onProgress)
 
     const paramsData = buildParamsBuffer(flame, 20, 0)
     this.device.queue.writeBuffer(this.paramsBuffer, 0, paramsData)
 
-    this.runPostIterate(histW, histH, outW, outH)
+    if (compact) {
+      onProgress?.({ stage: 'filtering', batchCompleted: 0, totalBatches: 1, percentage: 93 })
+      this.runPostIterateCompact(outW, outH)
+    } else {
+      onProgress?.({ stage: 'density', batchCompleted: 0, totalBatches: 1, percentage: 92 })
+      this.runPostIterateOriginal(histW, histH, outW, outH)
+    }
 
     onProgress?.({ stage: 'displaying', batchCompleted: 0, totalBatches: 1, percentage: 98 })
 

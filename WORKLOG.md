@@ -547,3 +547,75 @@ ash/
 - `pnpm run typecheck` ✅
 - `pnpm run build` ✅（179KB gzipped 63KB）
 - `bench-render.mjs` 4K q4000 os3 ✅ (45,756ms)
+
+---
+
+## 渲染性能优化轮 3 — 高质量参数黑帧修复（autoresearch 风格）
+
+### 问题
+
+高质量参数（如 3840×2160 q1000 os5）导致黑帧（前端 ~4ms 出图），无错误提示。
+
+### 根因
+
+直方图缓冲区超出 GPU `maxBufferSize` (2048MB)：
+- 4K os3: histogram = 1.12 GiB ✓, density = 1.12 GiB ✓
+- 4K os5: histogram = 3.31 GiB ✗, density = 3.31 GiB ✗
+
+`createBuffer()` 静默失败 → 所有 compute pass 无效 → 黑帧。
+
+### 方法论
+
+autoresearch 风格实验循环：
+- 每次 bench 前跑 `pnpm run bench-render --width W --height H --quality Q --oversample OS`
+- 唯一指标：`status` (pass/fail) + `render_ms`
+- 结果记录到 `bench-results.tsv`
+
+### E10: 紧凑直方图 + 合并 Density/Filter
+
+- histogram 格式从 4×`atomic<u32>` (16 bytes/px) 改为 2×`atomic<u32>` (8 bytes/px)
+- 打包: `buf[0] = (R<<16|G)`, `buf[1] = (B<<16|count)`
+- 使用 `atomicCompareExchangeWeak` + 饱和加法（16 位 max 65535）
+- 消除 density buffer：filter shader 直接读 compact histogram，就地计算密度
+- 4K os5 histogram = 1.55 GiB ✓ (fits 2048MB)
+
+**问题**: CAS 开销 ~2.6×，导致原本正常的配置（q4000 os3）TDR 崩溃
+
+### E10-fix: 双管线自动切换 ✅
+
+**策略**: 渲染时动态检测 buffer 尺寸，选择最优管线：
+
+- **原始管线** (histogram 16B/px + density buffer): 当两个 buffer 均 ≤ `maxBufferSize` 时使用
+  - `atomicAdd` 全精度，性能最优
+  - 4K os1-os4 走此路径
+- **紧凑管线** (histogram 8B/px, 无 density buffer): 当原始管线 buffer 超限时使用
+  - `atomicCompareExchangeWeak` + 16 位饱和，merged density-filter
+  - 每批最大 8M 线程（防 TDR）
+  - 4K os5+ 走此路径
+
+**决策点**: `useCompactPath(histW, histH)` — 比较 `histW × histH × 16` vs `maxBufferSize`
+
+### 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `renderer/shaders/iterate.wgsl.ts` | 新增 `ITERATE_COMPACT_SHADER`（CAS 打包写入） |
+| `renderer/shaders/filter.wgsl.ts` | 新增 `FILTER_COMPACT_SHADER`（合并密度估计+滤波） |
+| `renderer/shaders/density.wgsl.ts` | 恢复原始密度着色器（被 E10 误删） |
+| `renderer/pipeline.ts` | 双管线架构：5 个 compute pipeline + 动态选择 |
+| `package.json` | 新增 `bench-render` script |
+
+### 结果
+
+| 配置 | 状态 | render_ms | 路径 |
+|------|------|-----------|------|
+| 3840×2160 q4000 os3 (基线) | **PASS** | 45,378 | 原始 atomicAdd |
+| 3840×2160 q1000 os5 (修复目标) | **PASS** | 13,549 | 紧凑 CAS |
+
+**修复**: 黑帧 95ms → 正常渲染 13.5s
+**无回归**: q4000 os3 性能持平（45,378ms vs 45,747ms baseline）
+
+### 防御性措施
+
+- `ensureHistogramBuffer()` 检查 histogram size ≤ `maxBufferSize`，超限时抛出明确错误
+- 紧凑管线每批线程数限制 8M，防止 TDR 超时

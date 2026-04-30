@@ -8,7 +8,8 @@
     "build": "vue-tsc -b && vite build",
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",
-    "test-render": "node scripts/test-render.mjs"
+    "test-render": "node scripts/test-render.mjs",
+    "bench-render": "node scripts/bench-render.mjs"
   },
   "dependencies": {
     "fast-xml-parser": "^5.7.2",
