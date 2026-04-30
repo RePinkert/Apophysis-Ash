@@ -335,4 +335,10 @@ ash/
 
 ### 已知遗留
 
-- `public/favicon.svg` 缺失 — `index.html` 引用了 `/favicon.svg` 但文件不存在，待后续处理
+- ~~`public/favicon.svg` 缺失~~ ✅ 已修复（见下方）
+
+### Favicon
+
+- **新增**: `public/favicon.png` — 由 RePinkert 使用 Apophysis 渲染的分形图像，采用 CC BY-NC-ND 4.0 协议授权
+- **修改**: `index.html` favicon 引用从 `favicon.svg` 改为 `favicon.png`
+- **修改**: 两个 README 添加 favicon 版权声明（CC BY-NC-ND 4.0，署名 RePinkert）
