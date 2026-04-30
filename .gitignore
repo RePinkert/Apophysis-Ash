@@ -25,3 +25,6 @@ dist-ssr
 
 # Test output
 test-output.png
+
+# Bench results (untracked, like autoresearch results.tsv)
+bench-results.tsv
