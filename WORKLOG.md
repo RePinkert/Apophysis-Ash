@@ -342,3 +342,49 @@ ash/
 - **新增**: `public/favicon.png` — 由 RePinkert 使用 Apophysis 渲染的分形图像，采用 CC BY-NC-ND 4.0 协议授权
 - **修改**: `index.html` favicon 引用从 `favicon.svg` 改为 `favicon.png`
 - **修改**: 两个 README 添加 favicon 版权声明（CC BY-NC-ND 4.0，署名 RePinkert）
+
+---
+
+## UX 修复轮 — Issue 2 + Issue 1 + Issue 3
+
+### 优先级重新评估
+
+- **Issue 2** 从「中优先级 UX 改善」升级为「高优先级 Bug」— 功能性缺陷，用户显式设置的画布尺寸被静默覆盖
+- **Issue 1** 维持高优先级 — 分形编辑器的核心交互能力
+- **Issue 3** 维持中优先级 — UX 打磨
+
+### Issue 2: 随机生成覆盖画布尺寸 ✅
+
+- **根因**: `generateRandomFlame()` 硬编码 `width: 1280, height: 720`，`generateRandom()` 通过 `setFlame()` 整体替换
+- **修复**: `generateRandomFlame()` 增加 `width`/`height` 参数（带默认值），store 中 `generateRandom()` 传入 `flame.value.width`/`flame.value.height`
+- **涉及文件**: `utils/random-flame.ts`, `stores/flame.ts`
+
+### Issue 1: Canvas 鼠标交互（缩放/平移/旋转）✅
+
+- **渲染策略**: 采用防抖自动渲染（复用现有 300ms deep watch），暂不实现低分辨率实时预览
+- **交互设计**（对齐原版 Apophysis 7X）:
+  - **左键拖拽**: 平移，调整 `flame.center`
+  - **右键拖拽 / Ctrl+左键**: 旋转，调整 `flame.rotate`
+  - **滚轮**: 以鼠标位置为中心缩放，调整 `flame.scale` + `flame.center`
+- **实现细节**:
+  - `canvasToFlameOffset()`: 像素偏移 → 分形坐标偏移（考虑 displayScale、canvas 居中偏移、rotate 逆矩阵）
+  - `onWheel()`: 缩放时重新计算 center 以保持鼠标下的分形点不动（zoom-to-cursor）
+  - CSS: `cursor: grab` / `cursor: grabbing` 视觉反馈
+  - `@contextmenu.prevent` 屏蔽右键菜单
+- **涉及文件**: `components/RenderCanvas.vue`
+
+### Issue 3: 滚轮步进 ✅
+
+- **方案**: 创建 `v-wheel-step` 全局自定义指令，在 `main.ts` 中注册
+- **功能**:
+  - `<input type="range">`: 滚轮按 `step` 调整值，受 `min`/`max` 约束
+  - `<input type="number">`: 同上
+  - `<select>`: 滚轮切换选项（`selectedIndex ± 1`）
+  - **修饰键**: Shift = 1/10 步进，Ctrl/Cmd = 10x 步进
+- **涉及文件**:
+  - 新增 `directives/vWheelStep.ts`
+  - 修改 `main.ts`（全局注册）
+  - 修改 `ControlPanel.vue`（6 range + 5 number）
+  - 修改 `TransformEditor.vue`（2 range + 8 number）
+  - 修改 `PaletteBar.vue`（1 select）
+  - 修改 `Toolbar.vue`（2 select）
