@@ -178,8 +178,8 @@ export const useFlameStore = defineStore('flame', () => {
     loadDefaultPalettes,
     loadDefaultTemplates,
     generateRandom() {
-      const f = generateRandomFlame(palettes.value)
-      setFlame(f)
+      const f = flame.value
+      setFlame(generateRandomFlame(palettes.value, f.width, f.height))
     },
   }
 })

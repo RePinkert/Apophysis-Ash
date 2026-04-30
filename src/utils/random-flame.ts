@@ -57,7 +57,7 @@ function randomXForm(index: number, total: number): XForm {
   }
 }
 
-export function generateRandomFlame(palettes: Palette[]): Flame {
+export function generateRandomFlame(palettes: Palette[], width: number = 1280, height: number = 720): Flame {
   const numXforms = randInt(2, 5)
   const xforms: XForm[] = []
 
@@ -79,8 +79,8 @@ export function generateRandomFlame(palettes: Palette[]): Flame {
   return {
     name: pickRandom(names) + ' ' + randInt(1, 999),
     version: 'apophysis-next-1.0',
-    width: 1280,
-    height: 720,
+    width: width,
+    height: height,
     center: [rand(-0.5, 0.5), rand(-0.5, 0.5)],
     scale: rand(100, 500),
     angle: 0,
