@@ -10,7 +10,9 @@
     "preview": "vite preview",
     "test-render": "node scripts/test-render.mjs",
     "test-interaction": "node scripts/test-interaction.mjs",
-    "bench-render": "node scripts/bench-render.mjs"
+    "bench-render": "node scripts/bench-render.mjs",
+    "convert-flam3": "node scripts/convert-flam3-palettes.mjs",
+    "convert-ugr": "node scripts/convert-ugr-palettes.mjs"
   },
   "dependencies": {
     "fast-xml-parser": "^5.7.2",

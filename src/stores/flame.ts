@@ -242,9 +242,17 @@ export const useFlameStore = defineStore('flame', () => {
 
   async function loadDefaultPalettes() {
     try {
-      const resp = await fetch('/palettes/default.json')
-      const data = await resp.json()
-      palettes.value = Array.isArray(data) ? data : []
+      const [defaultResp, flam3Resp] = await Promise.all([
+        fetch('/palettes/default.json'),
+        fetch('/palettes/flam3.json').catch(() => null),
+      ])
+      const defaultData = await defaultResp.json()
+      const flam3Data = flam3Resp ? await flam3Resp.json() : []
+      const merged = [
+        ...(Array.isArray(defaultData) ? defaultData : []),
+        ...(Array.isArray(flam3Data) ? flam3Data : []),
+      ]
+      palettes.value = merged
     } catch {
       palettes.value = []
     }

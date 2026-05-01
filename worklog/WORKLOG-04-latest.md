@@ -281,4 +281,54 @@
 
 ### 已知遗留
 
-- 当前 `cmap.ugr` 仅 84 个调色板，原版 Apophysis 7X 完整调色板集约 700+ 个，需额外获取
+- ~~当前 `cmap.ugr` 仅 84 个调色板，原版 Apophysis 7X 完整调色板集约 700+ 个，需额外获取~~ ✅ 已解决
+
+---
+
+## 社区调色板集成
+
+### 来源
+
+`flam3-palettes.xml` — 来自 [scottdraves/flam3](https://github.com/scottdraves/flam3) 仓库，包含 **701 个调色板**，GPL-3.0 许可证。这是 Apophysis / Electric Sheep / flam3 社区的标准调色板集。
+
+### 格式
+
+- XML 格式：`<palette number="N" name="xxx" data="00RRGGBB..."/>`
+- 每个调色板 256 色，每个色 = 8 字符 hex（00RRGGBB），共 2048 hex 字符
+
+### 转换脚本
+
+- **`scripts/convert-flam3-palettes.mjs`** — 从 GitHub 下载 XML → 解析 → 输出 `public/palettes/flam3.json`
+- **`scripts/convert-ugr-palettes.mjs`** — 从本地 `cmap.ugr` 重新生成 `public/palettes/default.json`（修正 count: 400→256 不一致问题）
+- `package.json` 新增 `convert-flam3` / `convert-ugr` 脚本
+
+### 数据修正
+
+- `default.json` 从 `count: 400` 修正为 `count: 256`（与着色器 256 索引一致）
+- 转换脚本默认输出压缩 JSON（无格式化空白）
+
+### 应用加载
+
+- `stores/flame.ts` 的 `loadDefaultPalettes()` 改为并行加载两个文件：
+  - `palettes/default.json`（84 个，内置 UGR）
+  - `palettes/flam3.json`（701 个，社区 flam3）
+  - 合并为单一 `palettes` 数组（共 785 个）
+  - `flam3.json` 加载失败时降级为仅 84 个内置
+
+### 文件大小
+
+| 文件 | 压缩后 |
+|------|--------|
+| `default.json` | 262 KB |
+| `flam3.json` | 2.2 MB |
+| 合计 | 2.4 MB |
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（265KB / gzip 77KB）
+- `pnpm run test-interaction` ✅（9 passed, 0 failed）
+
+### 待优化
+
+- 785 个调色板的下拉列表浏览体验需要改善（搜索/过滤/分组）
