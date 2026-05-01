@@ -329,10 +329,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       let iy = i32(round((xp * params.sin_angle + yp * params.cos_angle) * nuscale + f32(params.height) * 0.5));
 
       if (ix >= 0 && ix < i32(params.width) && iy >= 0 && iy < i32(params.height)) {
-        var ci = i32(round(pcolor * 255.0));
-        ci = clamp(ci, 0, 255);
+        let ci = u32(round(pcolor * 256.0)) % 256u;
 
-        let cmap = palette[u32(ci)];
+        let cmap = palette[ci];
         let wl = params.white_level;
 
         atomicAdd(&histogram[(u32(iy) * params.width + u32(ix)) * 4u + 0u], u32(cmap.r * wl));
@@ -690,10 +689,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       let iy = i32(round((xp * params.sin_angle + yp * params.cos_angle) * nuscale + f32(params.height) * 0.5));
 
       if (ix >= 0 && ix < i32(params.width) && iy >= 0 && iy < i32(params.height)) {
-        var ci = i32(round(pcolor * 255.0));
-        ci = clamp(ci, 0, 255);
+        let ci = u32(round(pcolor * 256.0)) % 256u;
 
-        let cmap = palette[u32(ci)];
+        let cmap = palette[ci];
         let wl = params.white_level;
 
         let rv = u32(cmap.r * wl);

@@ -1068,3 +1068,45 @@ Issue 1 实现的鼠标交互（平移/旋转/缩放）在每次 `mousemove` 事
 - `pnpm run build`
 - `pnpm run test-interaction`（paletteOffset 和 undo palette 测试仍应 PASS）
 - 浏览器端手动验证调色板选择 + 旋转滑块
+
+---
+
+## Bug 修复轮 5 — 调色板颜色选取 + 选择 UI
+
+### Issue A: 调色板颜色选取逻辑与原版不一致（严重）
+
+- **现象**: 调色板旋转后渲染看起来是单色，失去原有的渐变着色
+- **根因**: 与原版 Apophysis 7X 存在两处差异:
+
+#### 差异 1: 调色板索引映射公式（致命）
+
+原版 Apophysis 7X 使用 `Round(c * 256) mod 256`（循环映射，c=0 和 c=1 映射到同一色条目，调色板是闭合环路）。ash 使用 `round(c * 255.0)` + `clamp(0, 255)`（线性映射，调色板是断开的线性斜坡，c=1 映射到 palette[255] 而非循环回 palette[0]）。
+
+- **修复**: 两个 iterate shader（ITERATE_SHADER + ITERATE_COMPACT_SHADER）中 `var ci = i32(round(pcolor * 255.0)); ci = clamp(ci, 0, 255);` → `let ci = u32(round(pcolor * 256.0)) % 256u;`
+- **涉及文件**: `renderer/shaders/iterate.wgsl.ts`
+
+#### 差异 2: 调色板旋转方向（中等）
+
+原版使用正向偏移 `palette[(i + offset) % 256]`，ash 使用反向偏移 `original[(i - offset) % 256]`，导致旋转滑块方向与原版相反。
+
+- **修复**: `buildPaletteBuffer` 和 PaletteBar 的 `rotatedGradient` computed 中 `((i - offset) % len + len) % len` → `((i + offset) % len + len) % len`
+- **涉及文件**: `renderer/buffers.ts`, `components/PaletteBar.vue`
+
+### Issue B: 调色板选择 UI 不可用（严重）✅
+
+- **现象**: 84 个 36×22px 缩略方块水平排列，缩略图太小难区分、无文字名称、无法快速定位
+- **修复**: 重写 PaletteBar.vue 预设选择器为自定义下拉组件:
+  - 触发器: 当前选中调色板的渐变预览条 + 名称 + ▼ 展开箭头
+  - 下拉列表: 每项显示 80px 渐变条 + 调色板名称，最大 260px 高度滚动
+  - `selectedIndex` 持久化，选择后不清空
+  - 点击组件外部区域自动收起（全局 click-outside 监听）
+  - 键盘导航: ↑↓ 移动悬停 + Enter 选择 + Esc 关闭
+  - 保留旋转预览条、旋转滑块（-128 ~ +128）、UGR 文件加载按钮
+- **涉及文件**: `components/PaletteBar.vue`（完全重写）
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（264KB / gzip 77KB）
+- `pnpm run test-render` ✅（GPU readback: 26,295 / 1,500,000 non-black）
+- `pnpm run test-interaction` ✅（9 passed, 0 failed）
