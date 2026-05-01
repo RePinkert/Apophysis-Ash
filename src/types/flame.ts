@@ -60,6 +60,13 @@ export const BUILTIN_VARIATION_NAMES = [
 
 export const EXTENDED_VARIATION_NAMES = [
   'julian', 'bubble', 'pre_blur', 'noise', 'blur',
+  'exponential', 'power', 'cosine', 'rings', 'fan',
+  'blob', 'pdj', 'perspective', 'ngon',
+  'curl', 'bipolar', 'elliptic', 'cell', 'crackle',
+  'juliascope', 'split', 'wedge', 'wedge_julia',
+  'wedge_sph', 'bwraps', 'bwraps7', 'motion_blur',
+  'zblur', 'gaussian_blur', 'radial_blur',
+  'post_rotate_x', 'post_rotate_y',
 ] as const
 
 export type BuiltinVariationName = typeof BUILTIN_VARIATION_NAMES[number]

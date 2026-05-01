@@ -53,6 +53,20 @@
       <span class="val">{{ flame.vibrancy.toFixed(2) }}</span>
     </div>
 
+    <div class="param-row">
+      <label>{{ t('controlPanel.gammaThreshold') }}</label>
+      <input type="range" v-wheel-step :value="flame.gammaThreshold" min="0.001" max="0.5" step="0.001"
+        @input="update('gammaThreshold', $event)" />
+      <span class="val">{{ flame.gammaThreshold.toFixed(3) }}</span>
+    </div>
+
+    <div class="param-row">
+      <label>{{ t('controlPanel.whiteLevel') }}</label>
+      <input type="range" v-wheel-step :value="flame.whiteLevel" min="1" max="1000" step="1"
+        @input="update('whiteLevel', $event)" />
+      <span class="val">{{ flame.whiteLevel }}</span>
+    </div>
+
     <h3>{{ t('controlPanel.canvas') }}</h3>
 
     <div class="param-row">

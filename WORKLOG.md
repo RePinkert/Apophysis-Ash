@@ -717,3 +717,197 @@ Issue 1 实现的鼠标交互（平移/旋转/缩放）在每次 `mousemove` 事
 
 - `pnpm run typecheck` ✅
 - `pnpm run build` ✅（198KB / gzip 66KB）
+
+---
+
+## 变体库扩展 — 第一批（9 个数学变体）
+
+### 目标
+
+扩展变体库从 23 → 32，实现原版 Apophysis 7X 中缺失的数学变体。
+
+### 新增变体
+
+| 索引 | 名称 | 算法 | 额外参数 |
+|------|------|------|----------|
+| 23 | `exponential` | `exp(x-1)*cos(πy), exp(x-1)*sin(πy)` | 无 |
+| 24 | `power` | `pow(r,sin(a))*cos(a), pow(r,sin(a))*sin(a)` | 无 |
+| 25 | `cosine` | `cos(πx)*cosh(y), -sin(πx)*sinh(y)` | 无 |
+| 26 | `rings` | 环形模变换 | `rings_coeff` |
+| 27 | `fan` | 分区扇形变换 | `fan_dist` |
+| 28 | `blob` | 波浪圆形变换 | `blob_low`, `blob_high`, `blob_waves` |
+| 29 | `pdj` | 四参数曲线族 | `pdj1`-`pdj4` |
+| 30 | `perspective` | 透视投影 | `perspective_angle`, `perspective_dist` |
+| 31 | `ngon` | N 边形变换 | `ngon_power`, `ngon_sides`, `ngon_corners`, `ngon_circle` |
+
+### 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `types/renderer.ts` | `MAX_VARIATIONS`: 23 → 32 |
+| `types/flame.ts` | `EXTENDED_VARIATION_NAMES` 新增 9 个名称 |
+| `renderer/shaders/variations.wgsl.ts` | 新增 9 个 WGSL 函数 |
+| `renderer/shaders/iterate.wgsl.ts` | XForm struct 扩展（var_weights 32 + 15 参数字段），新增 9 个 dispatch block |
+| `renderer/buffers.ts` | `XFORM_STRUCT_SIZE` 更新，`buildXFormBuffer` 写入新参数 |
+| `renderer/pipeline.ts` | `XFORMS_BUFFER_SIZE` 改用 `XFORM_STRUCT_SIZE`（消除硬编码） |
+| `components/TransformEditor.vue` | 新增 6 个变体参数编辑区 |
+| `parser/flame-xml.ts` | `isExtendedVariation()` 新增 9 个名称 |
+
+### Bug 修复
+
+- **WGSL `fmod` 不存在**: `variation_fan` 中 `fmod(a, b)` 改为 `a % b`
+- **WGSL `let` 不可变**: `variation_fan` 和 `variation_ngon` 中 `let angle/theta` 改为 `var`
+- **`XFORMS_BUFFER_SIZE` 硬编码**: 从 `MAX_XFORMS * 34 * 4` 改为 `MAX_XFORMS * XFORM_STRUCT_SIZE`
+- **`XFORM_STRUCT_SIZE` 计数错误**: 14 → 15 个额外参数（rings_coeff 到 ngon_circle 共 15 个）
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（209KB / gzip 68KB，+11KB）
+- `pnpm run test-render` ✅（GPU readback: 1,147,236 / 1,500,000 non-black）
+
+---
+
+## 变体库扩展 — 第二批（9 个变体）
+
+### 新增变体
+
+| 索引 | 名称 | 算法 | 额外参数 |
+|------|------|------|----------|
+| 32 | `curl` | 复数域 curl 变换 | `curl_c1`, `curl_c2` |
+| 33 | `bipolar` | 双极坐标变换 | `bipolar_shift` |
+| 34 | `elliptic` | 椭圆坐标变换 | 无 |
+| 35 | `cell` | 细胞/棋盘格变换 | `cell_size` |
+| 36 | `crackle` | 裂纹 Voronoi 变换 | `crackle_scale`, `crackle_z`, `crackle_spreadx`, `crackle_spready` |
+| 37 | `juliascope` | Julia 对称版本 | `juliascope_power`, `juliascope_dist` |
+| 38 | `split` | 轴分裂变换 | `split_xsize`, `split_ysize` |
+| 39 | `wedge` | 楔形变换 | `wedge_angle`, `wedge_hole`, `wedge_count`, `wedge_swirl` |
+| 40 | `wedge_julia` | Julia 楔形 | `wedge_julia_power`, `wedge_julia_angle`, `wedge_julia_count`, `wedge_julia_dist` |
+
+### 涉及文件
+
+同第一批模式，额外新增 21 个参数字段到 XForm struct 和 buffer。
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（224KB / gzip 71KB，+15KB）
+- `pnpm run test-render` ✅（GPU readback: 1,147,236 / 1,500,000 non-black）
+
+---
+
+## 变体库扩展 — 第三批（9 个变体，含 post-transform）
+
+### 新增变体
+
+| 索引 | 名称 | 算法 | 额外参数 |
+|------|------|------|----------|
+| 41 | `wedge_sph` | 球面楔形 | `wedge_sph_angle`, `wedge_sph_hole`, `wedge_sph_count`, `wedge_sph_swirl` |
+| 42 | `bwraps` | 边界包裹 | `bwraps_cellsize`, `bwraps_space`, `bwraps_gain`, `bwraps_innerTwist`, `bwraps_outerTwist` |
+| 43 | `bwraps7` | bwraps 变体 | 同 bwraps |
+| 44 | `motion_blur` | 运动模糊 | `motion_blur_angle`, `motion_blur_length` |
+| 45 | `zblur` | Z 轴模糊 | 无（使用随机数） |
+| 46 | `gaussian_blur` | 高斯模糊（Box-Muller） | 无（使用随机数） |
+| 47 | `radial_blur` | 径向模糊 | `radial_blur_angle` |
+| 48 | `post_rotate_x` | X 轴 3D 旋转 | 无（权重即角度） |
+| 49 | `post_rotate_y` | Y 轴 3D 旋转 | 无（权重即角度） |
+
+### post-transform 特殊处理
+
+`post_rotate_x`/`post_rotate_y` 不走标准累加路径，在所有变体累加完成后作为 3D 旋转后投影应用。在 iterate shader 中 `px = accum.x; py = accum.y;` 之后插入条件逻辑。
+
+### 最终变体总数
+
+**50 个变体**（18 内置 + 32 扩展），完整覆盖原版 Apophysis 7X 核心变体集。
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（236KB / gzip 72KB，+12KB）
+- `pnpm run test-render` ✅（GPU readback: 953,509 / 1,500,000 non-black）
+
+---
+
+## Phase 4: 最终变换 + 后置仿射 + XML 导出 + 渲染参数 UI
+
+### Feature 1: 最终变换（Final Transform）
+
+最终变换是在所有常规迭代收敛后、写入直方图之前，对每个点应用一次的特殊变换。它是 Apophysis 的核心功能，许多经典火焰设计依赖它。
+
+#### GPU 端
+
+- **XForm struct 扩展**: 新增 `post: array<f32, 6>` 字段（后置仿射系数），struct 从 97 扩展到 103 个 float（388→412 字节）
+- **Params struct 扩展**: 新增 `has_final_xform: u32` 字段，buffer 从 28×4 扩展到 29×4 字节
+- **新 binding**: `@group(0) @binding(4) var<storage, read> final_xform: XForm;`
+- **后置仿射**: 在 `post_rotate_x`/`post_rotate_y` 之后、直方图写入之前应用 `xf.post` 仿射变换
+- **最终变换**: 在 `it >= fuse` 块内、直方图写入之前，如果 `has_final_xform != 0` 则应用 final_xform 的完整变换链（仿射→变体→后旋转→后置仿射）
+- 两个 iterate shader（ITERATE_SHADER + ITERATE_COMPACT_SHADER）同步修改
+
+#### Buffer 层
+
+- `XFORM_STRUCT_SIZE`: 从 97×4 扩展到 103×4 字节（+6 for post[6]）
+- `buildXFormBuffer`: 在 `paramBase + 55`..`paramBase + 60` 写入 post 系数（默认 [1,0,0,1,0,0]）
+- 新函数 `buildFinalXFormBuffer(xform: XForm | undefined)`: 构建单个 XForm buffer，undefined 时返回零填充 buffer
+- `buildParamsBuffer`: 新增 `u32[26] = has_final_xform` 标志
+
+#### Pipeline 层
+
+- 新增 `finalXformBuffer: GPUBuffer`（binding 4）
+- `createIterateBindGroup` 新增 `{ binding: 4, resource: { buffer: this.finalXformBuffer } }`
+- `render()`/`renderToImageData()` 写入 final xform 数据
+- `destroy()` 销毁 finalXformBuffer
+
+#### Store 层
+
+- 新增 `editingFinalXform: ref<boolean>` — 编辑器是否正在编辑最终变换
+- 新增 `setFinalXform(xform: XForm | undefined)` — 设置/清除最终变换（带 pushHistory）
+- 新增 `updateFinalXform(updates: Partial<XForm>)` — 更新最终变换的字段
+- `updateXform` 新增 `updates.post` 处理
+
+#### UI 层
+
+- **TransformList.vue**: 底部新增「最终变换」条目，带 +/- 切换按钮，样式区分（蓝色斜体）
+- **TransformEditor.vue**: 当 `editingFinalXform` 时操作 `flame.finalXform`；新增「后置仿射」6 系数编辑区
+
+#### Parser 层
+
+- `parseXForm`: 读取 `post` 属性（空格分隔 6 个数字），`'post'` 加入 `XFORM_RESERVED_ATTRS`
+- `parseSingleFlame`: 解析 `<finalxform>` 元素
+- `XMLParser` isArray 配置新增 `'finalxform'`
+
+### Feature 2: XML 导出
+
+- 新函数 `exportFlameXML(flame: Flame): string` — 生成标准 Apophysis `.flame` XML 格式
+- 序列化所有渲染参数（brightness/gamma/contrast/vibrancy/white_level 等）
+- 序列化每个 xform（coefs/post/weight/color/symmetry + 变体权重 + 变体参数）
+- 序列化 `<finalxform>`（如果存在）
+- 序列化调色板为 hex 字符串
+- Store 新增 `exportToXML()` 方法
+- Toolbar 新增「保存 .flame」按钮
+
+### Feature 3: 渲染参数 UI
+
+- ControlPanel.vue 新增 `gammaThreshold` 滑块（0.001–0.5）和 `whiteLevel` 滑块（1–1000）
+- 这两个参数已通过 `buildParamsBuffer` 传递到 GPU，此前仅缺少 UI 控件
+
+### 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `renderer/buffers.ts` | XFORM_STRUCT_SIZE +6, buildXFormBuffer 写入 post, 新 buildFinalXFormBuffer, buildParamsBuffer +has_final_xform |
+| `renderer/shaders/iterate.wgsl.ts` | XForm struct +post, Params struct +has_final_xform, binding 4, 后置仿射逻辑, 最终变换逻辑（两个 shader） |
+| `renderer/pipeline.ts` | PARAMS_SIZE 29×4, finalXformBuffer, binding 4, 写入/销毁 |
+| `stores/flame.ts` | editingFinalXform, setFinalXform, updateFinalXform, exportToXML, updateXform +post |
+| `parser/flame-xml.ts` | parseXForm +post, parseSingleFlame +finalxform, exportFlameXML |
+| `components/TransformList.vue` | 最终变换条目, +/- 切换 |
+| `components/TransformEditor.vue` | isFinal 模式, 后置仿射编辑区, update/updatePostCoef |
+| `components/Toolbar.vue` | 保存 .flame 按钮 |
+| `components/ControlPanel.vue` | gammaThreshold + whiteLevel 滑块 |
+| `i18n/locales/zh-CN.ts` | 8 个新 key |
+| `i18n/locales/en.ts` | 8 个新 key |
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（261KB / gzip 76KB，+25KB）
+- `pnpm run test-render` ✅（GPU readback: 26,295 / 1,500,000 non-black）

@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, shallowRef, computed } from 'vue'
 import type { Flame, XForm, Palette } from '../types/flame'
 import { createDefaultFlame, createDefaultXForm } from '../types/flame'
-import { parseFlameXML } from '../parser/flame-xml'
+import { parseFlameXML, exportFlameXML } from '../parser/flame-xml'
 import { generateRandomFlame } from '../utils/random-flame'
 import { flameToJSON, flameFromJSON } from '../parser/flame-json'
 import { parseUGR } from '../parser/palette-ugr'
@@ -16,6 +16,7 @@ const MAX_HISTORY = 50
 export const useFlameStore = defineStore('flame', () => {
   const flame = shallowRef<Flame>(createDefaultFlame())
   const selectedXformIndex = ref(0)
+  const editingFinalXform = ref(false)
   const isDirty = ref(false)
   const palettes = ref<Palette[]>([])
   const editorMode = ref<'browser' | 'detailed'>('browser')
@@ -96,6 +97,10 @@ export const useFlameStore = defineStore('flame', () => {
     return flameToJSON(flame.value)
   }
 
+  function exportToXML(): string {
+    return exportFlameXML(flame.value)
+  }
+
   function addXform() {
     pushHistory()
     const f = flame.value
@@ -129,6 +134,7 @@ export const useFlameStore = defineStore('flame', () => {
       xf.variationParams = updates.variationParams
     }
     if (updates.coefs) xf.coefs = updates.coefs
+    if (updates.post) xf.post = updates.post
     if (updates.weight !== undefined) xf.weight = updates.weight
     if (updates.color !== undefined) xf.color = updates.color
     if (updates.symmetry !== undefined) xf.symmetry = updates.symmetry
@@ -162,6 +168,30 @@ export const useFlameStore = defineStore('flame', () => {
     pushHistory()
     const f = flame.value
     ;(f as unknown as Record<string, unknown>)[key as string] = value
+    flame.value = { ...f }
+    isDirty.value = true
+  }
+
+  function setFinalXform(xform: XForm | undefined) {
+    pushHistory()
+    const f = flame.value
+    f.finalXform = xform
+    flame.value = { ...f }
+    isDirty.value = true
+  }
+
+  function updateFinalXform(updates: Partial<XForm>) {
+    const f = flame.value
+    if (!f.finalXform) return
+    pushHistory()
+    const xf = f.finalXform
+    if (updates.variations) xf.variations = updates.variations
+    if (updates.variationParams) xf.variationParams = updates.variationParams
+    if (updates.coefs) xf.coefs = updates.coefs
+    if (updates.post) xf.post = updates.post
+    if (updates.weight !== undefined) xf.weight = updates.weight
+    if (updates.color !== undefined) xf.color = updates.color
+    if (updates.symmetry !== undefined) xf.symmetry = updates.symmetry
     flame.value = { ...f }
     isDirty.value = true
   }
@@ -208,6 +238,7 @@ export const useFlameStore = defineStore('flame', () => {
   return {
     flame,
     selectedXformIndex,
+    editingFinalXform,
     isDirty,
     palettes,
     editorMode,
@@ -220,12 +251,15 @@ export const useFlameStore = defineStore('flame', () => {
     loadFromJSON,
     loadFromFile,
     exportToJSON,
+    exportToXML,
     addXform,
     removeXform,
     updateXform,
     updateVariation,
     updateVariationParam,
     updateRenderParam,
+    setFinalXform,
+    updateFinalXform,
     setPalette,
     loadPalettesFromUGR,
     loadPalettesFromJSON,

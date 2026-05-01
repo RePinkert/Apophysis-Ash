@@ -44,5 +44,5 @@ export interface RenderProgress {
 export type RenderProgressCallback = (progress: RenderProgress) => void
 
 export const MAX_XFORMS = 12
-export const MAX_VARIATIONS = 23
+export const MAX_VARIATIONS = 50
 export const WORKGROUP_SIZE = 256

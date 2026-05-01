@@ -1,15 +1,15 @@
 import type { Flame } from '../types/flame'
 import { MAX_XFORMS, WORKGROUP_SIZE } from '../types/renderer'
 import type { RenderProgressCallback } from '../types/renderer'
-import { buildXFormBuffer, buildPaletteBuffer, buildParamsBuffer } from './buffers'
+import { buildXFormBuffer, buildPaletteBuffer, buildParamsBuffer, buildFinalXFormBuffer, XFORM_STRUCT_SIZE } from './buffers'
 import { VARIATIONS_WGSL } from './shaders/variations.wgsl'
 import { ITERATE_SHADER, ITERATE_COMPACT_SHADER } from './shaders/iterate.wgsl'
 import { DENSITY_SHADER } from './shaders/density.wgsl'
 import { FILTER_SHADER, FILTER_COMPACT_SHADER } from './shaders/filter.wgsl'
 import { DISPLAY_SHADER_VERT, DISPLAY_SHADER_FRAG } from './shaders/display.wgsl'
 
-const PARAMS_SIZE = 28 * 4
-const XFORMS_BUFFER_SIZE = MAX_XFORMS * 34 * 4
+const PARAMS_SIZE = 29 * 4
+const XFORMS_BUFFER_SIZE = MAX_XFORMS * XFORM_STRUCT_SIZE
 const PALETTE_BUFFER_SIZE = 256 * 4 * 4
 const MAX_FILTER_WIDTH = 20
 const ITERS_PER_THREAD = 100
@@ -28,6 +28,7 @@ export class FlamePipeline {
   private paramsBuffer!: GPUBuffer
   private xformsBuffer!: GPUBuffer
   private paletteBuffer!: GPUBuffer
+  private finalXformBuffer!: GPUBuffer
   private histogramBuffer!: GPUBuffer
   private densityBuffer!: GPUBuffer | null
   private gaussianBuffer!: GPUBuffer
@@ -156,6 +157,11 @@ export class FlamePipeline {
       size: MAX_FILTER_WIDTH * MAX_FILTER_WIDTH * 4,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     })
+
+    this.finalXformBuffer = this.device.createBuffer({
+      size: XFORM_STRUCT_SIZE,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    })
   }
 
   private useCompactPath(histW: number, histH: number): boolean {
@@ -248,6 +254,7 @@ export class FlamePipeline {
         { binding: 1, resource: { buffer: this.xformsBuffer } },
         { binding: 2, resource: { buffer: this.paletteBuffer } },
         { binding: 3, resource: { buffer: this.histogramBuffer } },
+        { binding: 4, resource: { buffer: this.finalXformBuffer } },
       ],
     })
   }
@@ -378,6 +385,7 @@ export class FlamePipeline {
     this.device.queue.writeBuffer(this.xformsBuffer, 0, xformsData)
     this.device.queue.writeBuffer(this.paletteBuffer, 0, paletteData)
     this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussianData)
+    this.device.queue.writeBuffer(this.finalXformBuffer, 0, buildFinalXFormBuffer(flame.finalXform))
 
     const ctx = canvas.getContext('webgpu') as GPUCanvasContext | null
     if (!ctx) return
@@ -466,6 +474,7 @@ export class FlamePipeline {
     this.device.queue.writeBuffer(this.xformsBuffer, 0, xformsData)
     this.device.queue.writeBuffer(this.paletteBuffer, 0, paletteData)
     this.device.queue.writeBuffer(this.gaussianBuffer, 0, gaussianData)
+    this.device.queue.writeBuffer(this.finalXformBuffer, 0, buildFinalXFormBuffer(flame.finalXform))
 
     await this.runIterateBatches(flame, totalSamples, compact, onProgress)
 
@@ -524,6 +533,7 @@ export class FlamePipeline {
     this.paramsBuffer?.destroy()
     this.xformsBuffer?.destroy()
     this.paletteBuffer?.destroy()
+    this.finalXformBuffer?.destroy()
     this.histogramBuffer?.destroy()
     this.densityBuffer?.destroy()
     this.gaussianBuffer?.destroy()

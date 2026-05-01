@@ -8,6 +8,7 @@
         <input type="file" accept=".flame,.xml,.json" @change="onFileOpen" hidden />
       </label>
       <button @click="onSaveJSON">{{ t('toolbar.saveJSON') }}</button>
+      <button @click="onSaveFlame">{{ t('toolbar.saveFlame') }}</button>
       <button @click="onExportPNG">{{ t('toolbar.exportPNG') }}</button>
       <button class="btn-accent" @click="flameStore.generateRandom()">{{ t('toolbar.random') }}</button>
     </div>
@@ -95,6 +96,17 @@ function onSaveJSON() {
   const a = document.createElement('a')
   a.href = url
   a.download = `${flameStore.flame.name || 'flame'}.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function onSaveFlame() {
+  const xml = flameStore.exportToXML()
+  const blob = new Blob([xml], { type: 'application/xml' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${flameStore.flame.name || 'flame'}.flame`
   a.click()
   URL.revokeObjectURL(url)
 }

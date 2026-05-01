@@ -7,17 +7,30 @@
     <div
       v-for="(xf, i) in flameStore.flame.xforms"
       :key="i"
-      :class="['xform-item', { active: i === flameStore.selectedXformIndex }]"
-      @click="flameStore.selectedXformIndex = i"
+      :class="['xform-item', { active: i === flameStore.selectedXformIndex && !flameStore.editingFinalXform }]"
+      @click="flameStore.selectedXformIndex = i; flameStore.editingFinalXform = false"
     >
       <span class="xform-label">xform {{ i }}</span>
       <span class="xform-var">{{ getVariationSummary(xf) }}</span>
       <button class="xform-del" @click.stop="flameStore.removeXform(i)" v-if="flameStore.flame.xforms.length > 1">×</button>
     </div>
+    <div class="xform-separator"></div>
+    <div
+      :class="['xform-item', 'xform-final', { active: flameStore.editingFinalXform }]"
+      @click="flameStore.editingFinalXform = true"
+    >
+      <span class="xform-label">{{ t('transformList.finalXform') }}</span>
+      <span class="xform-var" v-if="flameStore.flame.finalXform">{{ getVariationSummary(flameStore.flame.finalXform) }}</span>
+      <span class="xform-var" v-else style="color:#666">—</span>
+      <button class="xform-del" @click.stop="onToggleFinal" :title="hasFinal ? t('transformList.removeFinal') : t('transformList.addFinal')">
+        {{ hasFinal ? '×' : '+' }}
+      </button>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
 import { useFlameStore } from '../stores/flame'
 import { useI18n } from '../i18n'
 import type { XForm } from '../types/flame'
@@ -25,10 +38,31 @@ import type { XForm } from '../types/flame'
 const flameStore = useFlameStore()
 const { t } = useI18n()
 
+const hasFinal = computed(() => !!flameStore.flame.finalXform)
+
 function getVariationSummary(xf: XForm): string {
   const vars = [...xf.variations.entries()].filter(([, _w]) => _w !== 0)
   if (vars.length === 0) return t('transformList.none')
   return vars.map(([n]) => `${n}`).join(', ')
+}
+
+function onToggleFinal() {
+  if (hasFinal.value) {
+    flameStore.setFinalXform(undefined)
+    if (flameStore.editingFinalXform) flameStore.editingFinalXform = false
+  } else {
+    const newXf: XForm = {
+      weight: 1,
+      color: 0,
+      symmetry: 0,
+      coefs: [1, 0, 0, 1, 0, 0],
+      post: [1, 0, 0, 1, 0, 0],
+      variations: new Map([['linear', 1.0]]),
+      variationParams: new Map(),
+    }
+    flameStore.setFinalXform(newXf)
+    flameStore.editingFinalXform = true
+  }
 }
 </script>
 
@@ -117,5 +151,16 @@ function getVariationSummary(xf: XForm): string {
 
 .xform-del:hover {
   color: #f66;
+}
+
+.xform-separator {
+  height: 1px;
+  margin: 4px 8px;
+  background: #333;
+}
+
+.xform-final .xform-label {
+  color: #8af;
+  font-style: italic;
 }
 </style>
