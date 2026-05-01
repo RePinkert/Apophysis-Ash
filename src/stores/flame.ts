@@ -8,7 +8,14 @@ import { flameToJSON, flameFromJSON } from '../parser/flame-json'
 import { parseUGR } from '../parser/palette-ugr'
 
 function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
+  if (obj === null || typeof obj !== 'object') return obj
+  if (obj instanceof Map) return new Map(Array.from(obj.entries(), ([k, v]) => [k, deepClone(v)])) as T
+  if (Array.isArray(obj)) return obj.map(v => deepClone(v)) as T
+  const result: Record<string, unknown> = {}
+  for (const key of Object.keys(obj as Record<string, unknown>)) {
+    result[key] = deepClone((obj as Record<string, unknown>)[key])
+  }
+  return result as T
 }
 
 const MAX_HISTORY = 50
@@ -172,6 +179,16 @@ export const useFlameStore = defineStore('flame', () => {
     isDirty.value = true
   }
 
+  function batchUpdateRenderParams(updates: Partial<Flame>) {
+    pushHistory()
+    const f = flame.value
+    for (const [k, v] of Object.entries(updates)) {
+      ;(f as unknown as Record<string, unknown>)[k] = v
+    }
+    flame.value = { ...f }
+    isDirty.value = true
+  }
+
   function setFinalXform(xform: XForm | undefined) {
     pushHistory()
     const f = flame.value
@@ -199,7 +216,15 @@ export const useFlameStore = defineStore('flame', () => {
   function setPalette(palette: Palette) {
     pushHistory()
     const f = flame.value
-    f.palette = palette
+    f.palette = { ...palette, colors: palette.colors.map(c => [...c] as [number, number, number]) }
+    f.paletteOffset = 0
+    flame.value = { ...f }
+    isDirty.value = true
+  }
+
+  function setPaletteOffset(offset: number) {
+    const f = flame.value
+    f.paletteOffset = offset
     flame.value = { ...f }
     isDirty.value = true
   }
@@ -258,9 +283,11 @@ export const useFlameStore = defineStore('flame', () => {
     updateVariation,
     updateVariationParam,
     updateRenderParam,
+    batchUpdateRenderParams,
     setFinalXform,
     updateFinalXform,
     setPalette,
+    setPaletteOffset,
     loadPalettesFromUGR,
     loadPalettesFromJSON,
     loadDefaultPalettes,
