@@ -6,8 +6,9 @@
 
     <div class="palette-dropdown" ref="dropdownRef">
       <div class="dropdown-trigger" @click="toggleDropdown" tabindex="0"
-        @keydown.up.prevent="onKeyNav(-1)" @keydown.down.prevent="onKeyNav(1)" @keydown.enter.prevent="toggleDropdown"
-        @keydown.escape="closeDropdown">
+        @keydown.up.prevent="onKeyNav(-1)" @keydown.down.prevent="onKeyNav(1)" @keydown.enter.prevent="onEnter"
+        @keydown.escape="closeDropdown"
+        @wheel.prevent="onTriggerWheel">
         <div class="trigger-swatch" :style="triggerStyle"></div>
         <span class="trigger-name">{{ selectedName }}</span>
         <span class="trigger-arrow">{{ isOpen ? '\u25B2' : '\u25BC' }}</span>
@@ -17,7 +18,7 @@
           v-for="(p, i) in flameStore.palettes"
           :key="i"
           class="dropdown-option"
-          :class="{ active: selectedIndex === i }"
+          :class="{ hovered: hoveredIndex === i, selected: selectedIndex === i }"
           @click="selectPreset(i)"
           @mouseenter="hoveredIndex = i"
           @mouseleave="hoveredIndex = -1"
@@ -52,7 +53,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { useFlameStore } from '../stores/flame'
 import { useI18n } from '../i18n'
 
@@ -108,10 +109,26 @@ const rotatedGradient = computed(() => {
 
 function toggleDropdown() {
   isOpen.value = !isOpen.value
+  if (isOpen.value && selectedIndex.value >= 0) {
+    hoveredIndex.value = selectedIndex.value
+    nextTick(() => {
+      const list = dropdownRef.value?.querySelector('.dropdown-list')
+      const opt = list?.children[selectedIndex.value] as HTMLElement | undefined
+      opt?.scrollIntoView({ block: 'nearest' })
+    })
+  }
 }
 
 function closeDropdown() {
   isOpen.value = false
+}
+
+function onEnter() {
+  if (isOpen.value && hoveredIndex.value >= 0) {
+    selectPreset(hoveredIndex.value)
+  } else {
+    toggleDropdown()
+  }
 }
 
 function selectPreset(index: number) {
@@ -126,6 +143,11 @@ function selectPreset(index: number) {
 function onKeyNav(delta: number) {
   if (!isOpen.value) {
     isOpen.value = true
+    if (selectedIndex.value >= 0) {
+      hoveredIndex.value = selectedIndex.value
+    } else {
+      hoveredIndex.value = delta > 0 ? 0 : flameStore.palettes.length - 1
+    }
     return
   }
   let next = hoveredIndex.value < 0 ? (delta > 0 ? 0 : flameStore.palettes.length - 1) : hoveredIndex.value + delta
@@ -137,9 +159,26 @@ function onKeyNav(delta: number) {
 }
 
 function onListWheel(e: WheelEvent) {
+  const len = flameStore.palettes.length
+  if (len === 0) return
+  const dir = e.deltaY > 0 ? 1 : -1
+  let next = hoveredIndex.value < 0 ? (dir > 0 ? 0 : len - 1) : hoveredIndex.value + dir
+  if (next < 0) next = len - 1
+  if (next >= len) next = 0
+  hoveredIndex.value = next
   const list = dropdownRef.value?.querySelector('.dropdown-list')
-  if (!list) return
-  list.scrollTop += e.deltaY
+  const opt = list?.children[next] as HTMLElement | undefined
+  opt?.scrollIntoView({ block: 'nearest' })
+}
+
+function onTriggerWheel(e: WheelEvent) {
+  const len = flameStore.palettes.length
+  if (len === 0) return
+  const dir = e.deltaY > 0 ? 1 : -1
+  let next = selectedIndex.value + dir
+  if (next < 0) next = len - 1
+  if (next >= len) next = 0
+  selectPreset(next)
 }
 
 function onRotateChange(e: Event) {
@@ -277,10 +316,14 @@ h3 {
   background: #0f3460;
 }
 
-.dropdown-option.active {
+.dropdown-option.hovered {
+  background: #0f3460;
+}
+
+.dropdown-option.selected {
   background: #162447;
-  outline: 1px solid #5599ff;
-  outline-offset: -1px;
+  border-left: 3px solid #5599ff;
+  padding-left: 5px;
 }
 
 .option-swatch {
