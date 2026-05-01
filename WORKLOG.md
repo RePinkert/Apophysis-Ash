@@ -911,3 +911,160 @@ Issue 1 实现的鼠标交互（平移/旋转/缩放）在每次 `mousemove` 事
 - `pnpm run typecheck` ✅
 - `pnpm run build` ✅（261KB / gzip 76KB，+25KB）
 - `pnpm run test-render` ✅（GPU readback: 26,295 / 1,500,000 non-black）
+
+---
+
+## Bug 修复轮 4 — 撤销/重做 + 调色板
+
+### Fix 14: 撤销/重做破坏 Map 类型（致命）✅
+
+- **现象**: 撤销或重做后，画布交互（拖拽/滚轮/旋转）不再触发渲染，canvas 上原有图像保留但无法更新
+- **根因 1**: `deepClone()` 使用 `JSON.parse(JSON.stringify(obj))`，而 `XForm.variations` 和 `XForm.variationParams` 是 `Map` 类型。`JSON.stringify(Map)` 输出 `{}`，反序列化后变成普通空对象，不再是 `Map`。后续渲染调用 `xf.variations.get(vname)` 抛出 `TypeError: {}.get is not a function`，被 `doRender()` 的 `try/catch` 静默捕获
+- **根因 2**: 初步修复时改用 `structuredClone()`，但 `structuredClone` 对 Vue `shallowRef` 的值可能抛出 `DataCloneError`，导致所有 `pushHistory()` 调用失败，进而所有交互（包括平移）都无法触发渲染
+- **最终修复**: 手写递归 `deepClone`，精确处理 Map/Array/普通对象：
+  ```ts
+  function deepClone<T>(obj: T): T {
+    if (obj === null || typeof obj !== 'object') return obj
+    if (obj instanceof Map) return new Map(Array.from(obj.entries(), ([k, v]) => [k, deepClone(v)])) as T
+    if (Array.isArray(obj)) return obj.map(v => deepClone(v)) as T
+    const result: Record<string, unknown> = {}
+    for (const key of Object.keys(obj as Record<string, unknown>)) {
+      result[key] = deepClone((obj as Record<string, unknown>)[key])
+    }
+    return result as T
+  }
+  ```
+- **涉及文件**: `stores/flame.ts`
+
+### Fix 15: 旋转/缩放产生双历史条目（中等）✅
+
+- **现象**: 旋转操作产生 `rotate` 和 `angle` 两个独立历史条目，缩放产生 `center` 和 `scale` 两个独立条目。单次撤销到达不一致的中间状态
+- **修复**: 新增 `batchUpdateRenderParams(updates: Partial<Flame>)` 方法，单次 `pushHistory()` + 批量写入。`RenderCanvas.vue` 中 `commitDrag()` 旋转分支和 `commitWheel()` 改为单次调用
+- **涉及文件**: `stores/flame.ts`, `components/RenderCanvas.vue`
+
+### Fix 16: 调色板选择后下拉框重置 + 调色板不可用（严重）✅
+
+- **现象**: 选择调色板后下拉框立即重置到占位符；调色板切换无视觉反馈
+- **根因**: `PaletteBar.vue` 中 `selectedPreset.value = ''` 在选择后立即重置；下拉框与 flame 状态无双向绑定
+- **修复**: 完全重写 PaletteBar 组件:
+  - **预设缩略图网格**: 所有预设调色板渲染为一排水平可滚动的渐变缩略条，点击选择，白色边框高亮当前选中
+  - **旋转滑块**: range slider（-128 到 +128），循环旋转当前调色板的 256 色数组，实时触发渲染
+  - **旋转预览条**: 显示旋转后的实际调色板渐变
+  - **Flame 类型新增 `paletteOffset`**: 存储旋转偏移量（默认 0），`buildPaletteBuffer` 应用循环旋转
+- **涉及文件**:
+  - `types/flame.ts` — Flame 新增 `paletteOffset`
+  - `components/PaletteBar.vue` — 完全重写
+  - `stores/flame.ts` — 新增 `setPaletteOffset`，`setPalette` 深拷贝 + 重置 offset
+  - `renderer/buffers.ts` — `buildPaletteBuffer` 应用 offset 循环旋转
+  - `renderer/pipeline.ts` — 传入 `flame.paletteOffset`
+  - `parser/flame-json.ts` — 序列化/反序列化 `paletteOffset`
+  - `parser/flame-xml.ts` — 解析时默认 offset=0
+  - `utils/random-flame.ts` — 默认 `paletteOffset: 0`
+  - `i18n/locales/zh-CN.ts`, `en.ts` — 新增 `palette.rotate`
+
+### 测试基础设施
+
+- **新增** `scripts/test-interaction.mjs` — 基于 Puppeteer + Vite 的交互测试脚本
+- **运行方式**: `pnpm run test-interaction`
+- **9 个测试用例**:
+  1. 初始渲染成功（GPU 可用 + lastRenderTime > 0）
+  2. 平移：`updateRenderParam('center')` 触发渲染
+  3. 旋转：`batchUpdateRenderParams({rotate, angle})` 触发渲染
+  4. 撤销旋转：undo 后参数回退 + 渲染成功 + Map 完整性
+  5. 重做：redo 后渲染成功 + Map 完整性
+  6. 缩放：`batchUpdateRenderParams({center, scale})` 触发渲染
+  7. 调色板偏移：`setPaletteOffset()` 触发渲染
+  8. 撤销调色板：undo 后渲染成功 + Map 完整性
+  9. 深度循环：5 次写入 + 4 次 undo + 4 次 redo，验证 Map 始终完整
+- **package.json** 新增 `test-interaction` script
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（262KB / gzip 76KB）
+- `pnpm run test-render` ✅（GPU readback: 26,295 / 1,500,000 non-black）
+- `pnpm run test-interaction` ✅（9 passed, 0 failed）
+
+---
+
+## Bug 修复轮 5 — 调色板 UI 重写（进行中）
+
+### 待修复问题
+
+#### Issue A: 调色板旋转后渲染看起来是单色
+
+- **现象**: 使用旋转滑块（-128 ~ +128）调整调色板偏移后，fractal art 看起来只有一种颜色，失去原有的渐变着色
+- **分析**:
+  - `buildPaletteBuffer` 的循环旋转逻辑经测试确认正确（`test-interaction` paletteOffset 测试 PASS）
+  - 可能原因 1: 默认调色板（`createDefaultPalette()`）本身色域窄——仅从紫到蓝的渐变，旋转后视觉差异小
+  - 可能原因 2: 部分预设调色板（如 south-sea-bather）颜色变化范围很小（185-200, 234-242, 235-254），旋转后选取的 256 色窗口内颜色接近
+  - 可能原因 3: 需要实际在浏览器中确认，是否存在渲染管线中的其他问题
+- **状态**: 待浏览器端实际验证
+
+#### Issue B: 调色板选择 UI 不可用
+
+- **现象**: 当前实现为预设缩略图网格（84 个 36×22px 小方块水平排列），操作不便：
+  - 84 个调色板无法快速定位
+  - 缩略图太小难以区分
+  - 无文字名称，只能靠颜色猜测
+- **原始问题（Fix 16 未完全解决）**: 原 `<select>` 下拉框在选择后执行 `selectedPreset.value = ''` 导致重置到占位符
+- **用户要求**:
+  1. 恢复下拉表单形式
+  2. 每个选项同时显示颜色渐变条 + 调色板名称
+  3. 选择后保持定位不重置
+  4. 名称保持英文即可（来自 UGR/JSON 文件的原始名称）
+
+### 实现方案: 自定义下拉组件
+
+#### 原因
+
+原生 `<select>` 的 `<option>` 不支持富内容（内嵌颜色条 + 文本），浏览器渲染行为不可控。使用自定义下拉组件可获得完全的样式和交互控制。
+
+#### UI 结构
+
+```
+[当前选中预览条 + 名称 ▼]        ← 点击展开/收起
+┌──────────────────────────────┐
+│ [■■■■■■] south-sea-bather    │  ← 每个选项：左边渐变条 + 右边名称
+│ [■■■■■■] sky-flesh           │
+│ [■■■■■■] blue-bather         │
+│ ...                          │  ← 最多显示 ~10 行，超出滚动
+│ [■■■■■■] yngpaint.ppm        │
+└──────────────────────────────┘
+```
+
+#### 交互设计
+
+- 点击触发器区域 → 展开/收起下拉列表
+- 点击某个选项 → 应用调色板、关闭下拉、保持选中索引
+- `v-wheel-step` 支持在关闭状态下滚轮切换上/下一个调色板
+- 点击组件外部区域 → 收起下拉（`@click.self` 或全局 click-outside 检测）
+- 键盘上下箭头支持（如果可行）
+
+#### 稳定定位
+
+- `selectedIndex: ref(-1)` 在组件生命周期内持久
+- 选择后设置 `selectedIndex.value = i`，永不主动清空
+- 仅在加载新 UGR 文件时重置为 -1
+- 旋转滑块变更不影响选中索引
+
+#### 组件保留部分
+
+- 旋转预览条（`rotatedGradient` computed）— 显示旋转后的实际调色板渐变
+- 旋转滑块（-128 ~ 128 range input）
+- UGR 文件加载按钮
+
+#### 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `src/components/PaletteBar.vue` | 重写预设选择器：缩略图网格 → 自定义下拉列表 |
+
+其他文件无变更（store 方法、渲染管线、i18n 等均已完成）。
+
+#### 验证
+
+- `pnpm run typecheck`
+- `pnpm run build`
+- `pnpm run test-interaction`（paletteOffset 和 undo palette 测试仍应 PASS）
+- 浏览器端手动验证调色板选择 + 旋转滑块
