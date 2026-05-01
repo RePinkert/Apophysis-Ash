@@ -80,4 +80,8 @@ export default {
     color: '颜色',
     opacity: '不透明度',
   },
+  export: {
+    incompatibleMsg: '以下变体在原版 Apophysis 7X 中不可用：',
+    incompatibleConfirm: '仍要导出吗？',
+  },
 }

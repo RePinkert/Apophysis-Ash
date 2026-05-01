@@ -79,6 +79,17 @@ export const ALL_VARIATION_NAMES: string[] = [
   ...EXTENDED_VARIATION_NAMES,
 ]
 
+export const INCOMPATIBLE_VARIATIONS = new Set([
+  'blob', 'wedge_julia', 'wedge_sph',
+  'exponential', 'power', 'cosine', 'rings', 'fan', 'perspective',
+  'bwraps7', 'motion_blur',
+  'heart', 'julia', 'bent', 'waves', 'popcorn',
+])
+
+export interface ExportCompatibility {
+  incompatible: string[]
+}
+
 export function createDefaultFlame(): Flame {
   return {
     name: 'New Flame',

@@ -332,3 +332,61 @@
 ### 待优化
 
 - 785 个调色板的下拉列表浏览体验需要改善（搜索/过滤/分组）
+
+---
+
+## XML 导出兼容性检查
+
+### 问题
+
+ash 导出的 `.flame` XML 文件在原版 Apophysis 7X 中打开时报错，提示缺少变体：handkerchief、wedge_julia、blob、crackle。
+
+### 根因分析
+
+ash 的 50 个变体中，有部分在原版 Apophysis 7X 中不存在或需要外部插件 DLL：
+
+| 等级 | 变体 | 说明 |
+|------|------|------|
+| A: 原版内置 | linear, sinusoidal, spherical, swirl, ... | 直接可用 |
+| B: 内部插件 | julian, juliascope, pdj, ngon, curl, ... | 编译进 exe |
+| C: 需外部 DLL | handkerchief, crackle, cell, split, ... | DLL 在 Plugins/ 中，可能未加载 |
+| D: 7X 不存在 | blob, wedge_julia, exponential, power, ... | ash 独有实现 |
+
+### 修复
+
+#### 新增兼容性常量 (`types/flame.ts`)
+
+- `INCOMPATIBLE_VARIATIONS`: D 级变体名称集合（16 个）
+- `ExportCompatibility` 接口：`{ incompatible: string[] }`
+
+#### 导出前检查 (`parser/flame-xml.ts`)
+
+- 新增 `checkExportCompatibility(flame)`: 扫描所有 xform 的 variations，返回不兼容列表
+- `exportFlameXML()` 在 `<flame>` 标签前添加 XML 注释：`<!-- Warning: contains variations not supported by original Apophysis 7X: blob, wedge_julia -->`
+
+#### 导出确认对话框 (`components/Toolbar.vue`)
+
+- `onSaveFlame()` 调用 `checkExportCompatibility()`
+- 如有不兼容变体，弹出 `confirm()` 对话框列出名称
+- 用户确认 → 正常导出（带 XML 注释）
+- 用户取消 → 不导出
+
+#### 国际化 (`i18n/locales/`)
+
+- `export.incompatibleMsg` / `export.incompatibleConfirm`
+
+### 涉及文件
+
+| 文件 | 改动 |
+|------|------|
+| `types/flame.ts` | 新增 `INCOMPATIBLE_VARIATIONS`、`ExportCompatibility` |
+| `parser/flame-xml.ts` | 新增 `checkExportCompatibility()`、XML 注释 |
+| `components/Toolbar.vue` | 导出前确认对话框 |
+| `i18n/locales/zh-CN.ts` | 兼容性提示中文 |
+| `i18n/locales/en.ts` | 兼容性提示英文 |
+
+### 验证
+
+- `pnpm run typecheck` ✅
+- `pnpm run build` ✅（265KB / gzip 77KB）
+- `pnpm run test-interaction` ✅（9 passed, 0 failed）

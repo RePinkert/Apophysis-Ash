@@ -46,6 +46,7 @@ import { useFlameStore } from '../stores/flame'
 import { useRendererStore } from '../stores/renderer'
 import { useI18n } from '../i18n'
 import type { Flame } from '../types/flame'
+import { checkExportCompatibility } from '../parser/flame-xml'
 
 defineProps<{
   gpuSupported: boolean
@@ -101,6 +102,11 @@ function onSaveJSON() {
 }
 
 function onSaveFlame() {
+  const compat = checkExportCompatibility(flameStore.flame)
+  if (compat.incompatible.length > 0) {
+    const msg = t('export.incompatibleMsg') + '\n\n' + compat.incompatible.join(', ') + '\n\n' + t('export.incompatibleConfirm')
+    if (!confirm(msg)) return
+  }
   const xml = flameStore.exportToXML()
   const blob = new Blob([xml], { type: 'application/xml' })
   const url = URL.createObjectURL(blob)

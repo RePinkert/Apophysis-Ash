@@ -80,4 +80,8 @@ export default {
     color: 'Color',
     opacity: 'Opacity',
   },
+  export: {
+    incompatibleMsg: 'The following variations are not supported by original Apophysis 7X:',
+    incompatibleConfirm: 'Export anyway?',
+  },
 }

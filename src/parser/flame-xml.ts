@@ -1,5 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
-import type { Flame, XForm, Palette } from '../types/flame'
+import type { Flame, XForm, Palette, ExportCompatibility } from '../types/flame'
+import { INCOMPATIBLE_VARIATIONS } from '../types/flame'
 
 const XFORM_RESERVED_ATTRS = new Set([
   'weight', 'color', 'symmetry', 'coefs', 'post', 'var_type', 'opacity',
@@ -173,6 +174,18 @@ function serializeXForm(xf: XForm, indent: string): string {
   return `${indent}<xform ${attrs.join(' ')}/>`
 }
 
+export function checkExportCompatibility(flame: Flame): ExportCompatibility {
+  const found = new Set<string>()
+  const allXforms = [...flame.xforms]
+  if (flame.finalXform) allXforms.push(flame.finalXform)
+  for (const xf of allXforms) {
+    for (const name of xf.variations.keys()) {
+      if (INCOMPATIBLE_VARIATIONS.has(name)) found.add(name)
+    }
+  }
+  return { incompatible: [...found] }
+}
+
 export function exportFlameXML(flame: Flame): string {
   const attrs: string[] = []
   attrs.push(`name="${flame.name}"`)
@@ -194,6 +207,12 @@ export function exportFlameXML(flame: Flame): string {
 
   const lines: string[] = []
   lines.push('<flames>')
+
+  const compat = checkExportCompatibility(flame)
+  if (compat.incompatible.length > 0) {
+    lines.push(`<!-- Warning: contains variations not supported by original Apophysis 7X: ${compat.incompatible.join(', ')} -->`)
+  }
+
   lines.push(`<flame ${attrs.join(' ')}>`)
 
   for (const xf of flame.xforms) {
