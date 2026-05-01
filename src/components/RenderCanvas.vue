@@ -207,8 +207,10 @@ function commitDrag() {
     ])
   } else if (interactionType === 'rotate' && cssRotateAccum !== 0) {
     const newRotate = startFlameRotate + cssRotateAccum
-    flameStore.updateRenderParam('rotate', newRotate)
-    flameStore.updateRenderParam('angle', newRotate * Math.PI / 180)
+    flameStore.batchUpdateRenderParams({
+      rotate: newRotate,
+      angle: newRotate * Math.PI / 180,
+    })
   }
 
   resetInteraction()
@@ -272,11 +274,13 @@ function commitWheel() {
   const dpx = (fx - newFx) * newScale
   const dpy = (fy - newFy) * newScale
 
-  flameStore.updateRenderParam('center', [
-    startFlameCenter[0] + (cos2 * dpx - sin2 * dpy) / newScale,
-    startFlameCenter[1] + (sin2 * dpx + cos2 * dpy) / newScale,
-  ])
-  flameStore.updateRenderParam('scale', newScale)
+  flameStore.batchUpdateRenderParams({
+    center: [
+      startFlameCenter[0] + (cos2 * dpx - sin2 * dpy) / newScale,
+      startFlameCenter[1] + (sin2 * dpx + cos2 * dpy) / newScale,
+    ],
+    scale: newScale,
+  })
 
   resetInteraction()
 }
