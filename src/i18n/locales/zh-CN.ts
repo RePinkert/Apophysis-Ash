@@ -53,6 +53,7 @@ export default {
     title: '调色板',
     preset: '-- 预设调色板 --',
     loadUGR: '加载 .ugr',
+    rotate: '旋转',
   },
   app: {
     initializing: '正在初始化 WebGPU...',

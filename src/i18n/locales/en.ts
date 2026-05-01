@@ -53,6 +53,7 @@ export default {
     title: 'Palette',
     preset: '-- Preset Palettes --',
     loadUGR: 'Load .ugr',
+    rotate: 'Rotate',
   },
   app: {
     initializing: 'Initializing WebGPU...',
