@@ -9,6 +9,7 @@
     "typecheck": "vue-tsc --noEmit",
     "preview": "vite preview",
     "test-render": "node scripts/test-render.mjs",
+    "test-interaction": "node scripts/test-interaction.mjs",
     "bench-render": "node scripts/bench-render.mjs"
   },
   "dependencies": {
