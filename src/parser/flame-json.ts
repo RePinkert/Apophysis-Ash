@@ -39,6 +39,7 @@ interface SerializedFlame {
     xforms: SerializedXForm[]
     finalXform?: SerializedXForm
     palette: number[][]
+    paletteOffset: number
   }
 }
 
@@ -76,6 +77,7 @@ function serializeFlame(flame: Flame): SerializedFlame {
       xforms: flame.xforms.map(serializeXForm),
       finalXform: flame.finalXform ? serializeXForm(flame.finalXform) : undefined,
       palette: flame.palette.colors.map(c => [c[0], c[1], c[2]]),
+      paletteOffset: flame.paletteOffset,
     },
   }
 }
@@ -121,6 +123,7 @@ function deserializeFlame(sf: SerializedFlame | Record<string, unknown>): Flame 
         c[0] ?? 0, c[1] ?? 0, c[2] ?? 0,
       ] as [number, number, number]),
     },
+    paletteOffset: (f as any).paletteOffset ?? 0,
   }
 }
 

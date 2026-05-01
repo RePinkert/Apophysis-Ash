@@ -20,6 +20,7 @@ export interface Flame {
   xforms: XForm[]
   finalXform?: XForm
   palette: Palette
+  paletteOffset: number
 }
 
 export interface XForm {
@@ -100,6 +101,7 @@ export function createDefaultFlame(): Flame {
     whiteLevel: 200,
     xforms: [createDefaultXForm(0), createDefaultXForm(1)],
     palette: createDefaultPalette(),
+    paletteOffset: 0,
   }
 }
 

@@ -97,5 +97,6 @@ export function generateRandomFlame(palettes: Palette[], width: number = 1280, h
     whiteLevel: 200,
     xforms,
     palette,
+    paletteOffset: 0,
   }
 }

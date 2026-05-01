@@ -70,6 +70,7 @@ function parseSingleFlame(f: Record<string, unknown>): Flame {
     xforms,
     finalXform,
     palette,
+    paletteOffset: 0,
   }
 }
 

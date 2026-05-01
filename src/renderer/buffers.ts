@@ -96,10 +96,12 @@ export function buildXFormBuffer(xforms: XForm[]): Float32Array {
   return data
 }
 
-export function buildPaletteBuffer(palette: Flame['palette']): Float32Array {
+export function buildPaletteBuffer(palette: Flame['palette'], offset: number = 0): Float32Array {
   const data = new Float32Array(256 * 4)
+  const len = palette.colors.length
   for (let i = 0; i < 256; i++) {
-    const c = palette.colors[i % palette.colors.length]
+    const si = ((i - offset) % len + len) % len
+    const c = palette.colors[si]
     data[i * 4 + 0] = c[0] / 255
     data[i * 4 + 1] = c[1] / 255
     data[i * 4 + 2] = c[2] / 255

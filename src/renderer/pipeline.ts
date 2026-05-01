@@ -379,7 +379,7 @@ export class FlamePipeline {
     const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
 
     const xformsData = buildXFormBuffer(flame.xforms)
-    const paletteData = buildPaletteBuffer(flame.palette)
+    const paletteData = buildPaletteBuffer(flame.palette, flame.paletteOffset)
     const gaussianData = this.buildGaussianKernel(oversample, flame.filterRadius)
 
     this.device.queue.writeBuffer(this.xformsBuffer, 0, xformsData)
@@ -468,7 +468,7 @@ export class FlamePipeline {
     const totalSamples = Math.round(flame.width * flame.height * flame.quality / (oversample * oversample))
 
     const xformsData = buildXFormBuffer(flame.xforms)
-    const paletteData = buildPaletteBuffer(flame.palette)
+    const paletteData = buildPaletteBuffer(flame.palette, flame.paletteOffset)
     const gaussianData = this.buildGaussianKernel(oversample, flame.filterRadius)
 
     this.device.queue.writeBuffer(this.xformsBuffer, 0, xformsData)
