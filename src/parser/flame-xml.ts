@@ -153,7 +153,7 @@ function parsePaletteHex(p: unknown): Palette {
 }
 
 function formatCoefs(coefs: [number, number, number, number, number, number]): string {
-  return coefs.map(n => String(+n.toFixed(6))).join(' ')
+  return coefs.map(n => String(+n.toFixed(15))).join(' ')
 }
 
 function serializeXForm(xf: XForm, indent: string): string {
@@ -163,6 +163,7 @@ function serializeXForm(xf: XForm, indent: string): string {
   attrs.push(`symmetry="${xf.symmetry}"`)
   attrs.push(`coefs="${formatCoefs(xf.coefs)}"`)
   if (xf.post) attrs.push(`post="${formatCoefs(xf.post)}"`)
+  attrs.push(`opacity="1"`)
 
   for (const [name, w] of xf.variations) {
     if (w !== 0) attrs.push(`${name}="${w}"`)
@@ -189,6 +190,7 @@ export function checkExportCompatibility(flame: Flame): ExportCompatibility {
 export function exportFlameXML(flame: Flame): string {
   const attrs: string[] = []
   attrs.push(`name="${flame.name}"`)
+  attrs.push(`version="Apophysis 7x"`)
   attrs.push(`size="${flame.width} ${flame.height}"`)
   attrs.push(`center="${flame.center[0]} ${flame.center[1]}"`)
   attrs.push(`scale="${flame.scale}"`)
@@ -197,13 +199,20 @@ export function exportFlameXML(flame: Flame): string {
   attrs.push(`oversample="${flame.oversample}"`)
   attrs.push(`filter="${flame.filterRadius}"`)
   attrs.push(`quality="${flame.quality}"`)
+  attrs.push(`background="${flame.background[0]} ${flame.background[1]} ${flame.background[2]}"`)
   attrs.push(`brightness="${flame.brightness}"`)
   attrs.push(`gamma="${flame.gamma}"`)
   attrs.push(`gamma_threshold="${flame.gammaThreshold}"`)
+  attrs.push(`estimator_radius="9"`)
+  attrs.push(`estimator_minimum="0"`)
+  attrs.push(`estimator_curve="0.4"`)
+  attrs.push(`enable_de="0"`)
+  attrs.push(`plugins=""`)
+  attrs.push(`new_linear="1"`)
   attrs.push(`vibrancy="${flame.vibrancy}"`)
   attrs.push(`contrast="${flame.contrast}"`)
   attrs.push(`white_level="${flame.whiteLevel}"`)
-  attrs.push(`background="${flame.background[0]} ${flame.background[1]} ${flame.background[2]}"`)
+  attrs.push(`curves="0 0 1 0 0 1 1 1 1 1 1 1 0 0 1 0 0 1 1 1 1 1 1 1 0 0 1 0 0 1 1 1 1 1 1 1 0 0 1 0 0 1 1 1 1 1 1 1"`)
 
   const lines: string[] = []
   lines.push('<flames>')

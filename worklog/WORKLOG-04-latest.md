@@ -1,6 +1,6 @@
-# WORKLOG-04 — Phase 4 + Bug 修复轮 4-5（最新）
+# WORKLOG-04 — Phase 4 + Bug 修复轮 4-6
 
-> 前序: [WORKLOG-03-interaction.md](WORKLOG-03-interaction.md)
+> 前序: [WORKLOG-03-interaction.md](WORKLOG-03-interaction.md) | 后续: [WORKLOG-05-latest.md](WORKLOG-05-latest.md)
 
 ## 项目概述
 
