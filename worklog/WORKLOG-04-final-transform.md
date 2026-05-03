@@ -1,6 +1,6 @@
 # WORKLOG-04 — Phase 4 + Bug 修复轮 4-6
 
-> 前序: [WORKLOG-03-interaction.md](WORKLOG-03-interaction.md) | 后续: [WORKLOG-05-latest.md](WORKLOG-05-latest.md)
+> 前序: [WORKLOG-03-interaction.md](WORKLOG-03-interaction.md) | 后续: [WORKLOG-05-xml-export.md](WORKLOG-05-xml-export.md)
 
 ## 项目概述
 
@@ -229,10 +229,10 @@
 | `worklog/WORKLOG-01-init.md` | 项目初始化 + 核心实现 + Bug 1-13 | 14 KB |
 | `worklog/WORKLOG-02-ux-perf.md` | UX 调查/修复 + 性能优化 + 进度条 | 18 KB |
 | `worklog/WORKLOG-03-interaction.md` | Canvas 交互 + 构图参考线 + 变体库扩展 | 11 KB |
-| `worklog/WORKLOG-04-latest.md` | Phase 4 + Bug 修复 4-5 + 后续工作（最新） | 12 KB |
+| `worklog/WORKLOG-04-final-transform.md` | Phase 4 + Bug 修复 4-5 + 后续工作 | 12 KB |
 
 - 原 `WORKLOG.md` 已删除
-- 日常使用只需注入 `WORKLOG-04-latest.md`
+- 日常使用只需注入 `WORKLOG-04-final-transform.md`
 
 ---
 

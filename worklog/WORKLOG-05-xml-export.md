@@ -1,6 +1,6 @@
-# WORKLOG-05 — XML 导出兼容性修复（最新）
+# WORKLOG-05 — XML 导出兼容性修复
 
-> 前序: [WORKLOG-04-latest.md](WORKLOG-04-latest.md)
+> 前序: [WORKLOG-04-final-transform.md](WORKLOG-04-final-transform.md) | 后续: [WORKLOG-06-export-compat.md](WORKLOG-06-export-compat.md)
 
 ## 项目概述
 
@@ -81,4 +81,4 @@ ash 导出的 `.flame` XML 文件在原版 Apophysis 7X 中打开时报错或不
 | 文件 | 改动 |
 |------|------|
 | `parser/flame-xml.ts` | `exportFlameXML()` 补充属性 + `serializeXForm()` 加 opacity + 精度提升 |
-| `worklog/WORKLOG-04-latest.md` | 标题和导航链接更新 |
+| `worklog/WORKLOG-04-final-transform.md` | 标题和导航链接更新 |

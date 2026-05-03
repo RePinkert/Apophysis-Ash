@@ -1,6 +1,6 @@
 import type { Flame, XForm, Palette } from '../types/flame'
 import { createDefaultPalette } from '../types/flame'
-import { ALL_VARIATION_NAMES } from '../types/flame'
+import { ALL_VARIATION_NAMES, VARIATION_REQUIRED_PARAMS } from '../types/flame'
 
 function rand(min: number, max: number): number {
   return Math.random() * (max - min) + min
@@ -45,6 +45,21 @@ function randomXForm(index: number, total: number): XForm {
   if (variations.has('julian')) {
     variationParams.set('julian_power', randInt(2, 20))
     variationParams.set('julian_dist', rand(-1.5, 1.5))
+  }
+
+  for (const varName of variations.keys()) {
+    if (varName === 'julian') continue
+    const defaults = VARIATION_REQUIRED_PARAMS[varName]
+    if (!defaults) continue
+    for (const [paramName, defaultVal] of Object.entries(defaults)) {
+      if (variationParams.has(paramName)) continue
+      if (paramName.includes('power') || paramName.includes('count') || paramName.includes('sides')) {
+        variationParams.set(paramName, randInt(2, 20))
+      } else {
+        const v = defaultVal !== 0 ? rand(defaultVal * 0.5, defaultVal * 1.5) : rand(-1.5, 1.5)
+        variationParams.set(paramName, +v.toFixed(4))
+      }
+    }
   }
 
   return {

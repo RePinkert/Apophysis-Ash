@@ -1,6 +1,6 @@
 import { XMLParser } from 'fast-xml-parser'
 import type { Flame, XForm, Palette, ExportCompatibility } from '../types/flame'
-import { INCOMPATIBLE_VARIATIONS } from '../types/flame'
+import { UNSUPPORTED_VARIATIONS, PLUGIN_VARIATION_NAMES, VARIATION_REQUIRED_PARAMS, PARAM_EXPORT_ALIASES, PARAM_IMPORT_ALIASES } from '../types/flame'
 
 const XFORM_RESERVED_ATTRS = new Set([
   'weight', 'color', 'symmetry', 'coefs', 'post', 'var_type', 'opacity',
@@ -95,7 +95,7 @@ function parseXForm(x: Record<string, unknown>): XForm {
       if (parts.length >= 2) {
         const varName = parts[0]
         if (isKnownVariationPrefix(varName)) {
-          variationParams.set(key, num)
+          variationParams.set(PARAM_IMPORT_ALIASES[key] ?? key, num)
         }
       }
     }
@@ -169,22 +169,35 @@ function serializeXForm(xf: XForm, indent: string): string {
     if (w !== 0) attrs.push(`${name}="${w}"`)
   }
   for (const [name, val] of xf.variationParams) {
-    attrs.push(`${name}="${val}"`)
+    attrs.push(`${PARAM_EXPORT_ALIASES[name] ?? name}="${val}"`)
+  }
+
+  for (const [varName, w] of xf.variations) {
+    if (w === 0) continue
+    const defaults = VARIATION_REQUIRED_PARAMS[varName]
+    if (!defaults) continue
+    for (const [paramName, defaultVal] of Object.entries(defaults)) {
+      if (!xf.variationParams.has(paramName)) {
+        attrs.push(`${PARAM_EXPORT_ALIASES[paramName] ?? paramName}="${defaultVal}"`)
+      }
+    }
   }
 
   return `${indent}<xform ${attrs.join(' ')}/>`
 }
 
 export function checkExportCompatibility(flame: Flame): ExportCompatibility {
-  const found = new Set<string>()
+  const pluginRequired = new Set<string>()
+  const unsupported = new Set<string>()
   const allXforms = [...flame.xforms]
   if (flame.finalXform) allXforms.push(flame.finalXform)
   for (const xf of allXforms) {
     for (const name of xf.variations.keys()) {
-      if (INCOMPATIBLE_VARIATIONS.has(name)) found.add(name)
+      if (PLUGIN_VARIATION_NAMES.has(name)) pluginRequired.add(name)
+      if (UNSUPPORTED_VARIATIONS.has(name)) unsupported.add(name)
     }
   }
-  return { incompatible: [...found] }
+  return { pluginRequired: [...pluginRequired], unsupported: [...unsupported] }
 }
 
 export function exportFlameXML(flame: Flame): string {
@@ -195,11 +208,11 @@ export function exportFlameXML(flame: Flame): string {
   attrs.push(`center="${flame.center[0]} ${flame.center[1]}"`)
   attrs.push(`scale="${flame.scale}"`)
   attrs.push(`angle="${flame.angle}"`)
-  attrs.push(`rotate="${flame.rotate}"`)
+  attrs.push(`rotate="0"`)
   attrs.push(`oversample="${flame.oversample}"`)
   attrs.push(`filter="${flame.filterRadius}"`)
   attrs.push(`quality="${flame.quality}"`)
-  attrs.push(`background="${flame.background[0]} ${flame.background[1]} ${flame.background[2]}"`)
+  attrs.push(`background="${flame.background[0] / 255} ${flame.background[1] / 255} ${flame.background[2] / 255}"`)
   attrs.push(`brightness="${flame.brightness}"`)
   attrs.push(`gamma="${flame.gamma}"`)
   attrs.push(`gamma_threshold="${flame.gammaThreshold}"`)
@@ -207,7 +220,13 @@ export function exportFlameXML(flame: Flame): string {
   attrs.push(`estimator_minimum="0"`)
   attrs.push(`estimator_curve="0.4"`)
   attrs.push(`enable_de="0"`)
-  attrs.push(`plugins=""`)
+  const pluginNames = new Set<string>()
+  for (const xf of [...flame.xforms, flame.finalXform].filter(Boolean) as XForm[]) {
+    for (const [name, w] of xf.variations) {
+      if (w !== 0 && PLUGIN_VARIATION_NAMES.has(name)) pluginNames.add(name)
+    }
+  }
+  attrs.push(`plugins="${[...pluginNames].join(' ')}"`)
   attrs.push(`new_linear="1"`)
   attrs.push(`vibrancy="${flame.vibrancy}"`)
   attrs.push(`contrast="${flame.contrast}"`)
@@ -216,11 +235,6 @@ export function exportFlameXML(flame: Flame): string {
 
   const lines: string[] = []
   lines.push('<flames>')
-
-  const compat = checkExportCompatibility(flame)
-  if (compat.incompatible.length > 0) {
-    lines.push(`<!-- Warning: contains variations not supported by original Apophysis 7X: ${compat.incompatible.join(', ')} -->`)
-  }
 
   lines.push(`<flame ${attrs.join(' ')}>`)
 
@@ -244,6 +258,12 @@ export function exportFlameXML(flame: Flame): string {
   lines.push('  </palette>')
 
   lines.push('</flame>')
+
+  const compat = checkExportCompatibility(flame)
+  if (compat.unsupported.length > 0) {
+    lines.push(`<!-- Warning: contains variations not supported by original Apophysis 7X: ${compat.unsupported.join(', ')} -->`)
+  }
+
   lines.push('</flames>')
 
   return lines.join('\n')

@@ -81,6 +81,7 @@ export default {
     opacity: '不透明度',
   },
   export: {
+    pluginMsg: '以下变体需要原版 Apophysis 7X 加载对应插件：',
     incompatibleMsg: '以下变体在原版 Apophysis 7X 中不可用：',
     incompatibleConfirm: '仍要导出吗？',
   },

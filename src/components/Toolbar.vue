@@ -103,9 +103,16 @@ function onSaveJSON() {
 
 function onSaveFlame() {
   const compat = checkExportCompatibility(flameStore.flame)
-  if (compat.incompatible.length > 0) {
-    const msg = t('export.incompatibleMsg') + '\n\n' + compat.incompatible.join(', ') + '\n\n' + t('export.incompatibleConfirm')
-    if (!confirm(msg)) return
+  const parts: string[] = []
+  if (compat.pluginRequired.length > 0) {
+    parts.push(t('export.pluginMsg') + '\n' + compat.pluginRequired.join(', '))
+  }
+  if (compat.unsupported.length > 0) {
+    parts.push(t('export.incompatibleMsg') + '\n' + compat.unsupported.join(', '))
+  }
+  if (parts.length > 0) {
+    parts.push(t('export.incompatibleConfirm'))
+    if (!confirm(parts.join('\n\n'))) return
   }
   const xml = flameStore.exportToXML()
   const blob = new Blob([xml], { type: 'application/xml' })

@@ -1,6 +1,6 @@
 # WORKLOG-03 — Canvas 交互优化与变体库扩展
 
-> 前序: [WORKLOG-02-ux-perf.md](WORKLOG-02-ux-perf.md) | 后续: [WORKLOG-04-latest.md](WORKLOG-04-latest.md)
+> 前序: [WORKLOG-02-ux-perf.md](WORKLOG-02-ux-perf.md) | 后续: [WORKLOG-04-final-transform.md](WORKLOG-04-final-transform.md)
 
 ## 项目概述
 

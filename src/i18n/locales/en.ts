@@ -81,6 +81,7 @@ export default {
     opacity: 'Opacity',
   },
   export: {
+    pluginMsg: 'The following variations require plugins in original Apophysis 7X:',
     incompatibleMsg: 'The following variations are not supported by original Apophysis 7X:',
     incompatibleConfirm: 'Export anyway?',
   },

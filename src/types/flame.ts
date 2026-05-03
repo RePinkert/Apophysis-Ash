@@ -79,15 +79,65 @@ export const ALL_VARIATION_NAMES: string[] = [
   ...EXTENDED_VARIATION_NAMES,
 ]
 
-export const INCOMPATIBLE_VARIATIONS = new Set([
-  'blob', 'wedge_julia', 'wedge_sph',
-  'exponential', 'power', 'cosine', 'rings', 'fan', 'perspective',
-  'bwraps7', 'motion_blur',
-  'heart', 'julia', 'bent', 'waves', 'popcorn',
+export const PARAM_EXPORT_ALIASES: Record<string, string> = {
+  pdj1: 'pdj_a',
+  pdj2: 'pdj_b',
+  pdj3: 'pdj_c',
+  pdj4: 'pdj_d',
+  bwraps_innerTwist: 'bwraps_inner_twist',
+  bwraps_outerTwist: 'bwraps_outer_twist',
+  bwraps7_innerTwist: 'bwraps7_inner_twist',
+  bwraps7_outerTwist: 'bwraps7_outer_twist',
+}
+
+export const PARAM_IMPORT_ALIASES: Record<string, string> = {
+  pdj_a: 'pdj1',
+  pdj_b: 'pdj2',
+  pdj_c: 'pdj3',
+  pdj_d: 'pdj4',
+  bwraps_inner_twist: 'bwraps_innerTwist',
+  bwraps_outer_twist: 'bwraps_outerTwist',
+  bwraps7_inner_twist: 'bwraps7_innerTwist',
+  bwraps7_outer_twist: 'bwraps7_outerTwist',
+}
+
+export const VARIATION_REQUIRED_PARAMS: Record<string, Record<string, number>> = {
+  julian:       { julian_power: 2, julian_dist: 1 },
+  rings:        { rings_coeff: 0.5 },
+  fan:          { fan_dist: 0.5 },
+  blob:         { blob_low: 0.7, blob_high: 1.0, blob_waves: 5.0 },
+  pdj:          { pdj1: 1.0, pdj2: 1.0, pdj3: 1.0, pdj4: 1.0 },
+  perspective:  { perspective_angle: 0.5, perspective_dist: 1.0 },
+  ngon:         { ngon_power: 2.0, ngon_sides: 5.0, ngon_corners: 0.0, ngon_circle: 0.0 },
+  curl:         { curl_c1: 0.5, curl_c2: 0.5 },
+  bipolar:      { bipolar_shift: 0.0 },
+  cell:         { cell_size: 0.5 },
+  crackle:      { crackle_seed: 0.0, crackle_scale: 1.0, crackle_z: 0.0, crackle_spreadx: 1.0, crackle_spready: 1.0 },
+  juliascope:   { juliascope_power: 2.0, juliascope_dist: 1.0 },
+  split:        { split_xsize: 0.3, split_ysize: 0.3 },
+  wedge:        { wedge_angle: 0.0, wedge_hole: 0.0, wedge_count: 5.0, wedge_swirl: 0.0 },
+  wedge_julia:  { wedge_julia_power: 2.0, wedge_julia_angle: 0.0, wedge_julia_count: 5.0, wedge_julia_dist: 1.0 },
+  wedge_sph:    { wedge_sph_angle: 0.0, wedge_sph_hole: 0.0, wedge_sph_count: 5.0, wedge_sph_swirl: 0.0 },
+  bwraps:       { bwraps_cellsize: 1.0, bwraps_space: 0.5, bwraps_gain: 1.0, bwraps_innerTwist: 0.0, bwraps_outerTwist: 0.0 },
+  bwraps7:      { bwraps7_cellsize: 1.0, bwraps7_space: 0.5, bwraps7_gain: 1.0, bwraps7_innerTwist: 0.0, bwraps7_outerTwist: 0.0 },
+  motion_blur:  { motion_blur_angle: 0.0, motion_blur_length: 0.5 },
+  radial_blur:  { radial_blur_angle: 0.1 },
+}
+
+export const PLUGIN_VARIATION_NAMES = new Set([
+  'handkerchief', 'fisheye', 'crackle',
+  'cell', 'split', 'stripes', 'ripple',
+])
+
+export const UNSUPPORTED_VARIATIONS = new Set([
+  'bent', 'popcorn', 'exponential', 'cosine', 'blob',
+  'wedge_julia', 'wedge_sph', 'motion_blur',
+  'fan', 'perspective', 'waves',
 ])
 
 export interface ExportCompatibility {
-  incompatible: string[]
+  pluginRequired: string[]
+  unsupported: string[]
 }
 
 export function createDefaultFlame(): Flame {
