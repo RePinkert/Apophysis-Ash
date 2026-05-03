@@ -9,6 +9,8 @@ Apophysis Ash (ash) 是经典分形火焰编辑器 [Apophysis 7X](https://source
 - **WebGPU 加速渲染** — 4-pass GPU 管线（IFS 迭代 → 对数密度估计 → 高斯滤波 → Gamma 校正显示）
 - **23 种变体函数** — 18 种内置变体 + 5 种扩展变体（linear, sinusoidal, spherical, swirl, julia, julian, bubble 等）
 - **文件格式兼容** — 支持旧版 `.flame` XML 格式和新 JSON 格式读写
+
+> **兼容性说明**: 导出的 `.flame` 文件遵循 Apophysis 7X XML 格式，但不保证在所有原版软件配置下完全兼容。原版 Apophysis 7X 从 `ApoPluginSrc.dat`（位于可执行文件旁）指定的路径加载插件 DLL，默认为 `<exe目录>\Plugins\`。如果插件 DLL 缺失或路径配置不正确，依赖插件的变体（如 `cell`、`crackle`、`handkerchief`）将无法加载。此外，ash 中实现的部分变体在原版 Apophysis 7X 中不存在，导出时会弹出警告。
 - **调色板系统** — 解析 `.ugr` 调色板文件，内置 84 个预设调色板
 - **随机火焰生成** — 随机变换组合、变体和调色板
 - **PNG 导出** — GPU readback → OffscreenCanvas 导出

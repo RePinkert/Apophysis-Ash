@@ -156,22 +156,14 @@ function formatCoefs(coefs: [number, number, number, number, number, number]): s
   return coefs.map(n => String(+n.toFixed(15))).join(' ')
 }
 
-function serializeXForm(xf: XForm, indent: string): string {
+function serializeVariations(xf: XForm): string[] {
   const attrs: string[] = []
-  attrs.push(`weight="${xf.weight}"`)
-  attrs.push(`color="${xf.color}"`)
-  attrs.push(`symmetry="${xf.symmetry}"`)
-  attrs.push(`coefs="${formatCoefs(xf.coefs)}"`)
-  if (xf.post) attrs.push(`post="${formatCoefs(xf.post)}"`)
-  attrs.push(`opacity="1"`)
-
   for (const [name, w] of xf.variations) {
     if (w !== 0) attrs.push(`${name}="${w}"`)
   }
   for (const [name, val] of xf.variationParams) {
     attrs.push(`${PARAM_EXPORT_ALIASES[name] ?? name}="${val}"`)
   }
-
   for (const [varName, w] of xf.variations) {
     if (w === 0) continue
     const defaults = VARIATION_REQUIRED_PARAMS[varName]
@@ -182,8 +174,29 @@ function serializeXForm(xf: XForm, indent: string): string {
       }
     }
   }
+  return attrs
+}
 
+function serializeXForm(xf: XForm, indent: string): string {
+  const attrs: string[] = []
+  attrs.push(`weight="${xf.weight}"`)
+  attrs.push(`color="${xf.color}"`)
+  attrs.push(`symmetry="${xf.symmetry}"`)
+  attrs.push(...serializeVariations(xf))
+  attrs.push(`coefs="${formatCoefs(xf.coefs)}"`)
+  if (xf.post) attrs.push(`post="${formatCoefs(xf.post)}"`)
+  attrs.push(`opacity="1"`)
   return `${indent}<xform ${attrs.join(' ')}/>`
+}
+
+function serializeFinalXForm(xf: XForm, indent: string): string {
+  const attrs: string[] = []
+  attrs.push(`color="${xf.color}"`)
+  attrs.push(`symmetry="${xf.symmetry}"`)
+  attrs.push(...serializeVariations(xf))
+  attrs.push(`coefs="${formatCoefs(xf.coefs)}"`)
+  if (xf.post) attrs.push(`post="${formatCoefs(xf.post)}"`)
+  return `${indent}<finalxform ${attrs.join(' ')}/>`
 }
 
 export function checkExportCompatibility(flame: Flame): ExportCompatibility {
@@ -203,7 +216,8 @@ export function checkExportCompatibility(flame: Flame): ExportCompatibility {
 export function exportFlameXML(flame: Flame): string {
   const attrs: string[] = []
   attrs.push(`name="${flame.name}"`)
-  attrs.push(`version="Apophysis 7x"`)
+  attrs.push(`version="Apophysis 7X"`)
+  attrs.push(`time="0"`)
   attrs.push(`size="${flame.width} ${flame.height}"`)
   attrs.push(`center="${flame.center[0]} ${flame.center[1]}"`)
   attrs.push(`scale="${flame.scale}"`)
@@ -243,7 +257,7 @@ export function exportFlameXML(flame: Flame): string {
   }
 
   if (flame.finalXform) {
-    lines.push(serializeXForm(flame.finalXform, '  ').replace('<xform', '<finalxform').replace('/>', '/>'))
+    lines.push(serializeFinalXForm(flame.finalXform, '  '))
   }
 
   // Serialize palette as hex
@@ -251,9 +265,8 @@ export function exportFlameXML(flame: Flame): string {
     r.toString(16).padStart(2, '0') + g.toString(16).padStart(2, '0') + b.toString(16).padStart(2, '0')
   ).join('')
   lines.push(`  <palette count="${flame.palette.count}" format="RGB">`)
-  // Split into 64-char lines for readability
-  for (let i = 0; i < hexColors.length; i += 64) {
-    lines.push(`    ${hexColors.substring(i, i + 64)}`)
+  for (let i = 0; i < hexColors.length; i += 48) {
+    lines.push(`    ${hexColors.substring(i, i + 48)}`)
   }
   lines.push('  </palette>')
 

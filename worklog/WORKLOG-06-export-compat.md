@@ -218,3 +218,7 @@ blob, wedge_julia
 ### 3. 参数名映射不完整（低优先级）
 
 `scripts/find-params.mjs` 发现部分参数名在 EXE 中找不到，可能原版使用不同命名。已通过 `VARIATION_REQUIRED_PARAMS` 的默认值机制兜底——即使参数名不完全匹配，导出文件仍包含合理默认值。
+
+---
+
+> **后续**: WORKLOG-06 中发现的 XML 格式偏差和插件路径问题在 [WORKLOG-07-xml-format-alignment.md](WORKLOG-07-xml-format-alignment.md) 中修复。

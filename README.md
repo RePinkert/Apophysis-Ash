@@ -9,6 +9,8 @@ Apophysis Ash (ash) is a modern rewrite of the classic fractal flame editor [Apo
 - **WebGPU-accelerated rendering** — 4-pass GPU pipeline (IFS iteration → log-density estimation → Gaussian filter → gamma-corrected display)
 - **23 variation functions** — 18 built-in + 5 extended (linear, sinusoidal, spherical, swirl, julia, julian, bubble, etc.)
 - **File format compatibility** — Reads legacy `.flame` XML and new JSON format
+
+> **Compatibility Note**: Exported `.flame` files follow the Apophysis 7X XML format, but full compatibility is not guaranteed across all original software configurations. The original Apophysis 7X loads plugin DLLs from the path specified in `ApoPluginSrc.dat` (next to the executable), defaulting to `<exe_dir>\Plugins\`. If plugin DLLs are missing or this path is misconfigured, variations that depend on plugins (e.g. `cell`, `crackle`, `handkerchief`) will fail to load. Additionally, some variations implemented in ash do not exist in the original Apophysis 7X and will trigger warnings on export.
 - **Palette system** — Parses `.ugr` palette files, ships with 84 preset palettes
 - **Random flame generation** — Randomized transforms, variations, and palettes
 - **PNG export** — GPU readback → OffscreenCanvas export
